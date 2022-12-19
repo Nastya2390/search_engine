@@ -29,6 +29,13 @@
         <relativePath/>
     </parent>
 
+    <repositories>
+        <repository>
+            <id>skillbox-gitlab</id>
+            <url>https://gitlab.skillbox.ru/api/v4/projects/263574/packages/maven</url>
+        </repository>
+    </repositories>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -63,6 +70,31 @@
             <groupId>com.googlecode.json-simple</groupId>
             <artifactId>json-simple</artifactId>
             <version>1.1.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.lucene.morphology</groupId>
+            <artifactId>morph</artifactId>
+            <version>1.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.lucene.analysis</groupId>
+            <artifactId>morphology</artifactId>
+            <version>1.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.lucene.morphology</groupId>
+            <artifactId>dictionary-reader</artifactId>
+            <version>1.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.lucene.morphology</groupId>
+            <artifactId>english</artifactId>
+            <version>1.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.lucene.morphology</groupId>
+            <artifactId>russian</artifactId>
+            <version>1.5</version>
         </dependency>
     </dependencies>
 
