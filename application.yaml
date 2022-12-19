@@ -14,11 +14,15 @@ spring:
       ddl-auto: update
     show-sql: true
 
+userAgent: NastyaSearchBot
+referer: http://www.google.com
+delayMs: 150
+
 indexing-settings:
   sites:
-    - url: https://www.lenta.ru
-      name: Лента.ру
     - url: https://www.skillbox.ru
       name: Skillbox
     - url: https://www.playback.ru
       name: PlayBack.Ru
+    - url: https://www.lenta.ru
+      name: Лента.ру

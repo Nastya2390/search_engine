@@ -4,6 +4,8 @@ import lombok.Data;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
 import javax.persistence.FetchType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
@@ -20,7 +22,8 @@ public class Site {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    @Column(nullable = false, unique = false, columnDefinition = "ENUM('INDEXING', 'INDEXED', 'FAILED')")
+    @Column(nullable = false, unique = false)
+    @Enumerated(EnumType.STRING)
     private IndexingStatus status;
 
     @Column(nullable = false, unique = false)
