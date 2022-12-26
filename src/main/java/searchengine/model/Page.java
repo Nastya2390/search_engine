@@ -1,7 +1,6 @@
 package searchengine.model;
 
 import lombok.Data;
-import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 
 import javax.persistence.Column;
@@ -35,20 +34,6 @@ public class Page {
     @JoinColumn(name = "site_id", nullable = false)
     private Site site;
 
-    public static Page constructPage(String path, Site site) {
-        try {
-            Document doc = Jsoup.connect(path).userAgent("NastyaSearchBot")
-                    .referrer("http://www.google.com")
-                    .ignoreContentType(true).ignoreHttpErrors(true)
-                    .maxBodySize(0).get();
-            Thread.sleep(150);
-            return constructPage("/", site, doc);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
     public static Page constructPage(String path, Site site, Document doc) {
         Page page = new Page();
         page.setSite(site);
@@ -56,6 +41,16 @@ public class Page {
         page.setContent(doc.toString());
         page.setCode(doc.connection().response().statusCode());
         return page;
+    }
+
+    @Override
+    public String toString() {
+        return "Page{" +
+                "id=" + id +
+                ", path='" + path + '\'' +
+                ", code=" + code +
+                ", site=" + site +
+                '}';
     }
 
 }

@@ -2,6 +2,7 @@ package searchengine.model;
 
 import lombok.Data;
 
+import javax.persistence.CascadeType;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.EnumType;
@@ -10,6 +11,7 @@ import javax.persistence.FetchType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.ManyToMany;
 import javax.persistence.OneToMany;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -38,6 +40,22 @@ public class Site {
     @Column(nullable = false, unique = false, columnDefinition = "VARCHAR(255)")
     private String name;
 
-    @OneToMany(fetch = FetchType.EAGER, mappedBy = "site")
+    @OneToMany(cascade = CascadeType.ALL, mappedBy = "site")
     private List<Page> pages;
+
+    @ManyToMany(mappedBy = "sites")
+    private List<Lemma> lemmas;
+
+    @Override
+    public String toString() {
+        return "Site{" +
+                "id=" + id +
+                ", status=" + status +
+                ", statusTime=" + statusTime +
+                ", lastError='" + lastError + '\'' +
+                ", url='" + url + '\'' +
+                ", name='" + name + '\'' +
+                ", pages=" + pages +
+                '}';
+    }
 }

@@ -14,9 +14,10 @@ spring:
       ddl-auto: update
     show-sql: true
 
-userAgent: NastyaSearchBot
-referer: http://www.google.com
-delayMs: 150
+dom-settings:
+  userAgent: NastyaSearchBot
+  referer: https://www.google.com
+  delayMs: 150
 
 indexing-settings:
   sites:

@@ -1,9 +1,13 @@
 package searchengine.controllers;
 
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import searchengine.dto.indexing.PageRequest;
 import searchengine.dto.indexing.Response;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.services.IndexingService;
@@ -34,6 +38,11 @@ public class ApiController {
     @GetMapping("/stopIndexing")
     public ResponseEntity<Response> stopIndexing() {
         return ResponseEntity.ok(indexingService.stopIndexing());
+    }
+
+    @PostMapping(value = "/indexPage", consumes = {MediaType.APPLICATION_JSON_VALUE})
+    public ResponseEntity<Response> indexPage(@RequestBody PageRequest pageRequest) {
+        return ResponseEntity.ok(indexingService.indexPage(pageRequest.getUrl()));
     }
 
 }
