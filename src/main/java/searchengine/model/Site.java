@@ -7,11 +7,9 @@ import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.EnumType;
 import javax.persistence.Enumerated;
-import javax.persistence.FetchType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
-import javax.persistence.ManyToMany;
 import javax.persistence.OneToMany;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -42,9 +40,6 @@ public class Site {
 
     @OneToMany(cascade = CascadeType.ALL, mappedBy = "site")
     private List<Page> pages;
-
-    @ManyToMany(mappedBy = "sites")
-    private List<Lemma> lemmas;
 
     @Override
     public String toString() {

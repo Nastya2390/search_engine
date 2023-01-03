@@ -22,9 +22,11 @@ public class DOMConfiguration {
 
     public Document getDocument(String url) {
         try {
-            Document doc = Jsoup.connect(url).userAgent(userAgent)
+            Document doc = Jsoup.connect(url)
+                    .userAgent(userAgent)
                     .referrer(referer)
-                    .ignoreContentType(true).ignoreHttpErrors(true)
+                    .ignoreContentType(true)
+                    .ignoreHttpErrors(true)
                     .maxBodySize(0).get();
             Thread.sleep(Long.parseLong(delayMs));
             return doc;

@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.DOMConfiguration;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
@@ -33,6 +34,8 @@ import static searchengine.dto.indexing.ErrorMessage.IndexingIsNotRun;
 import static searchengine.dto.indexing.ErrorMessage.IndexingIsNotStopped;
 import static searchengine.dto.indexing.ErrorMessage.IndexingIsStoppedByUser;
 import static searchengine.dto.indexing.ErrorMessage.InterruptedExceptionOccuredOnStopIndexing;
+import static searchengine.dto.indexing.ErrorMessage.NoConnectionToSite;
+import static searchengine.dto.indexing.ErrorMessage.NoSitesDataInConfigFile;
 import static searchengine.dto.indexing.ErrorMessage.PageIsOutOfConfigFile;
 import static searchengine.dto.indexing.ErrorMessage.SiteIsNotFoundByUrl;
 import static searchengine.dto.indexing.ErrorMessage.SiteIsSeveralTimesUsedInConfig;
@@ -54,24 +57,27 @@ public class IndexingServiceImpl implements IndexingService {
     public Response startIndexing() {
         SiteMapConstructor.isInterrupted = false;
         List<Site> sitesList = sites.getSites();
-        for (Site site : sitesList) {
-            deleteSiteRelatedInformation(site.getName());
-            searchengine.model.Site siteModel = fillSiteInfo(site);
-            addSitePages(siteModel);
-            // todo если произошла ошибка и обход завершить не удалось, изменять статус на FAILED и вносить в поле last_error понятную информацию о произошедшей ошибке.
-        }
+        if (sitesList.isEmpty())
+            return new IndexingResponseError(false, NoSitesDataInConfigFile.getValue());
+        deleteSitesRelatedInformation(sitesList.stream().map(Site::getName).collect(Collectors.toList()));
+        fillSitePagesInfo(fillSitesInfo(sitesList));
+        // todo если произошла ошибка и обход завершить не удалось, изменять статус на FAILED и вносить в поле last_error понятную информацию о произошедшей ошибке.
         return new IndexingResponse(true);
     }
 
-    private searchengine.model.Site fillSiteInfo(Site siteData) {
-        searchengine.model.Site siteModel = new searchengine.model.Site();
-        siteModel.setName(siteData.getName());
-        String url = getUrlWithoutWWW(siteData.getUrl());
-        siteModel.setUrl(url);
-        siteModel.setStatus(IndexingStatus.INDEXING);
-        siteModel.setStatusTime(LocalDateTime.now());
-        siteRepository.save(siteModel);
-        return siteModel;
+    private List<searchengine.model.Site> fillSitesInfo(List<Site> sitesList) {
+        List<searchengine.model.Site> siteModelList = new ArrayList<>();
+        for (Site siteData : sitesList) {
+            searchengine.model.Site siteModel = new searchengine.model.Site();
+            siteModel.setName(siteData.getName());
+            String url = getUrlWithoutWWW(siteData.getUrl());
+            siteModel.setUrl(url);
+            siteModel.setStatus(IndexingStatus.INDEXING);
+            siteModel.setStatusTime(LocalDateTime.now());
+            siteRepository.save(siteModel);
+            siteModelList.add(siteModel);
+        }
+        return siteModelList;
     }
 
     String getUrlWithoutWWW(String url) {
@@ -79,26 +85,65 @@ public class IndexingServiceImpl implements IndexingService {
                 .replace("http://www.", "http://");
     }
 
-    void deleteSiteRelatedInformation(String siteName) {
-        Optional<Integer> siteId = siteRepository.getIdBySiteName(siteName);
-        if (siteId.isPresent()) {
-            List<Page> pages = pageRepository.getPageBySiteId(siteId.get());
-            pageRepository.deleteAll(pages);
-            siteRepository.deleteById(siteId.get());
+    void deleteSitesRelatedInformation(List<String> siteNameList) {
+        for (String siteName : siteNameList) {
+            Optional<Integer> siteId = siteRepository.getIdBySiteName(siteName);
+            if (siteId.isPresent()) {
+                Optional<searchengine.model.Site> siteOpt = siteRepository.getSiteById(siteId.get());
+                List<Page> pages = pageRepository.getPageBySiteId(siteId.get());
+                for (Page page : pages) {
+                    Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageId(page.getId());
+                    // todo проверить что не пустой
+                    indexRepository.deleteAll(indexListOpt.get());
+                }
+                pageRepository.deleteAll(pages);
+                Optional<List<Lemma>> lemmaListOpt = lemmaRepository.getLemmaBySite(siteOpt.get());
+                lemmaRepository.deleteAll(lemmaListOpt.get());
+                siteRepository.deleteById(siteId.get());
+            }
         }
     }
 
-    void addSitePages(searchengine.model.Site site) {
-        Page rootPage = Page.constructPage("/", site, domConfiguration.getDocument(site.getUrl()));
-        Node root = new Node(site.getUrl(), rootPage, domConfiguration);
-        pool = new ForkJoinPool();
-        pool.invoke(new SiteMapConstructor(root, pageRepository, siteRepository, this));
-        if (!SiteMapConstructor.isInterrupted) {
-            site.setStatus(IndexingStatus.INDEXED);
-            siteRepository.save(site);
+    void fillSitePagesInfo(List<searchengine.model.Site> siteList) {
+        List<Node> rootNodes = new ArrayList<>();
+        for (searchengine.model.Site site : siteList) {
+            Document doc = domConfiguration.getDocument(site.getUrl());
+            if (doc == null) {
+                site.setStatus(IndexingStatus.FAILED);
+                site.setLastError(NoConnectionToSite.getValue());
+                siteRepository.save(site);
+                continue;
+            }
+            Page rootPage = Page.constructPage("/", site, doc);
+            rootNodes.add(new Node(site.getUrl(), rootPage, domConfiguration));
         }
-        if (isPageCodeValid(Objects.requireNonNull(rootPage).getCode()))
-            indexPage(site.getUrl() + Objects.requireNonNull(rootPage).getPath());
+        pool = new ForkJoinPool();
+        pool.invoke(new SiteMapConstructor(rootNodes, pageRepository, siteRepository, this));
+        //indexAllPages(siteList);
+        changeSitesStatusToIndexed(siteList);
+    }
+
+    private void indexAllPages(List<searchengine.model.Site> siteList) {
+        for (searchengine.model.Site site : siteList) {
+            if (!SiteMapConstructor.isInterrupted) {
+                Optional<Integer> siteId = siteRepository.getIdBySiteName(site.getName());
+                if (!siteId.isPresent()) return;
+                List<Page> pages = pageRepository.getPageBySiteId(siteId.get());
+                for (Page page : pages) {
+                    if (isPageCodeValid(Objects.requireNonNull(page).getCode()))
+                        indexPage(site.getUrl() + page.getPath());
+                }
+            }
+        }
+    }
+
+    private void changeSitesStatusToIndexed(List<searchengine.model.Site> siteList) {
+        if (!SiteMapConstructor.isInterrupted) {
+            for (searchengine.model.Site site : siteList) {
+                site.setStatus(IndexingStatus.INDEXED);
+                siteRepository.save(site);
+            }
+        }
     }
 
     @Override
@@ -148,8 +193,9 @@ public class IndexingServiceImpl implements IndexingService {
         if (!siteOpt.isPresent())
             return new IndexingResponseError(false, SiteIsNotFoundByUrl.getValue());
         String pagePath = url.replaceFirst(siteUrl, "");
-        Optional<Page> pageOpt = pageRepository.getPageByPath(pagePath);
+        Optional<Page> pageOpt = pageRepository.getPageByPathAndSite(pagePath, siteOpt.get());
         pageOpt.ifPresent(page -> savePageLemmasToDB(page, siteOpt.get()));
+        //todo если старницы не было в базе - добавить
         return new IndexingResponse(true);
     }
 
@@ -163,51 +209,48 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     private void savePageLemmasToDB(Page page, searchengine.model.Site site) {
-        deletePreviousPageIndexingInfo(page, site);
+        deletePreviousPageIndexingInfo(page);
         LemmasFinder lemmasFinder = new LemmasFinder(luceneMorphology);
         String textWithoutTags = lemmasFinder.deleteHtmlTags(page.getContent());
         Map<String, Integer> lemmas = lemmasFinder.getTextLemmas(textWithoutTags);
         for (String key : lemmas.keySet()) {
             Lemma lemma = fillLemmaInfo(site, key);
-            lemmaRepository.save(lemma);
-            Index index = fillIndexInfo(page, lemma, lemmas.get(key));
-            indexRepository.save(index);
+            fillIndexInfo(page, lemma, lemmas.get(key));
         }
     }
 
-    private Lemma fillLemmaInfo(searchengine.model.Site site, String word) {
-        Lemma lemma = new Lemma();
-        lemma.setLemma(word);
-        if (lemma.getSites() == null) {
-            List<searchengine.model.Site> sites = new ArrayList<>();
-            sites.add(site);
-            lemma.setSites(sites);
-            lemma.setFrequency(1);
+    @Transactional
+    public Lemma fillLemmaInfo(searchengine.model.Site site, String word) {
+        Lemma lemma;
+        Optional<List<Lemma>> lemmasOpt = lemmaRepository.getLemmaBySiteAndLemma(site, word);
+        if (lemmasOpt.isPresent() && lemmasOpt.get().size() > 0) {
+            // todo assert на число лемм найденных
+            lemma = lemmasOpt.get().iterator().next();
+            lemma.setFrequency(lemma.getFrequency() + 1);
         } else {
-            lemma.getSites().add(site);
-            lemma.setFrequency(lemma.getSites().size());
+            lemma = new Lemma();
+            lemma.setLemma(word);
+            lemma.setFrequency(1);
+            lemma.setSite(site);
         }
+        lemmaRepository.save(lemma);
         return lemma;
     }
 
-    private Index fillIndexInfo(Page page, Lemma lemma, double rank) {
+    private void fillIndexInfo(Page page, Lemma lemma, double rank) {
         Index index = new Index();
         index.setPage(page);
         index.setLemma(lemma);
         index.setRank(rank);
-        return index;
+        indexRepository.save(index);
     }
 
-    private void deletePreviousPageIndexingInfo(Page page, searchengine.model.Site site) {
-        Document doc = domConfiguration.getDocument(site.getUrl() + page.getPath());
-        page.setContent(Objects.requireNonNull(doc).toString());
-        page.setCode(doc.connection().response().statusCode());
-        pageRepository.save(Objects.requireNonNull(page));
+    private void deletePreviousPageIndexingInfo(Page page) {
         Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageId(page.getId());
         if (indexListOpt.isPresent()) {
             List<Index> indexList = indexListOpt.get();
             for (Index index : indexList) {
-                if (index.getLemma().getSites().size() == 1) {
+                if (index.getLemma().getFrequency() == 1) {
                     lemmaRepository.delete(index.getLemma());
                 } else {
                     index.getLemma().setFrequency(index.getLemma().getFrequency() - 1);

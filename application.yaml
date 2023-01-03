@@ -17,7 +17,7 @@ spring:
 dom-settings:
   userAgent: NastyaSearchBot
   referer: https://www.google.com
-  delayMs: 150
+  delayMs: 250
 
 indexing-settings:
   sites:
@@ -25,5 +25,5 @@ indexing-settings:
       name: Skillbox
     - url: https://www.playback.ru
       name: PlayBack.Ru
-    - url: https://www.lenta.ru
-      name: Лента.ру
+#    - url: https://www.lenta.ru
+#      name: Лента.ру

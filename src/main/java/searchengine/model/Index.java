@@ -24,11 +24,11 @@ public class Index {
     @Column(name = "`rank`", nullable = false, unique = false, columnDefinition = "FLOAT")
     private double rank;
 
-    @ManyToOne(cascade = CascadeType.PERSIST, optional = false)
+    @ManyToOne(optional = false)
     @JoinColumn(name = "page_id", nullable = false)
     private Page page;
 
-    @ManyToOne(cascade = CascadeType.PERSIST, optional = false)
+    @ManyToOne(optional = false)
     @JoinColumn(name = "lemma_id", nullable = false)
     private Lemma lemma;
 

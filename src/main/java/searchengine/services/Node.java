@@ -9,6 +9,7 @@ import searchengine.model.Page;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -29,13 +30,15 @@ public class Node {
     public List<Node> getChildren() throws IOException, InterruptedException {
         String urlAndPath = this.getSiteUrl() + page.getPath();
         Document doc = domConfiguration.getDocument(urlAndPath);
+        if (doc == null) return new ArrayList<>();
         Elements references = Objects.requireNonNull(doc).select("a[href]");
         List<Node> childNodes = new ArrayList<>();
         for (Element ref : references) {
             if (ref.absUrl("href").startsWith(urlAndPath) && !ref.absUrl("href").contains("#")) {
                 String url = ref.absUrl("href");
+                Document childDoc = domConfiguration.getDocument(url);
                 url = url.replace(ref.baseUri(), "/");
-                childNodes.add(new Node(this.getSiteUrl(), Page.constructPage(url, this.page.getSite(), doc), domConfiguration));
+                childNodes.add(new Node(this.getSiteUrl(), Page.constructPage(url, this.page.getSite(), childDoc), domConfiguration));
             }
         }
         return childNodes;

@@ -2,16 +2,13 @@ package searchengine.model;
 
 import lombok.Data;
 
-import javax.persistence.CascadeType;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.JoinColumn;
-import javax.persistence.JoinTable;
-import javax.persistence.ManyToMany;
-import java.util.List;
+import javax.persistence.ManyToOne;
 
 @Data
 @Entity
@@ -21,17 +18,15 @@ public class Lemma {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    @Column(nullable = false, unique = true, columnDefinition = "VARCHAR(255)")
+    @Column(nullable = false, columnDefinition = "VARCHAR(255)")
     private String lemma;
 
-    @Column(nullable = false, unique = false)
+    @Column(nullable = false)
     private int frequency;
 
-    @ManyToMany(cascade = CascadeType.ALL)
-    @JoinTable(name = "lemma_sites",
-            joinColumns = @JoinColumn(name = "lemma_id"),
-            inverseJoinColumns = @JoinColumn(name = "site_id"))
-    private List<Site> sites;
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "site_id", nullable = false)
+    private Site site;
 
     @Override
     public String toString() {
@@ -39,7 +34,6 @@ public class Lemma {
                 "id=" + id +
                 ", lemma='" + lemma + '\'' +
                 ", frequency=" + frequency +
-                ", sites=" + sites +
                 '}';
     }
 }

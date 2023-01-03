@@ -6,6 +6,7 @@ import searchengine.dto.statistics.DetailedStatisticsItem;
 import searchengine.dto.statistics.StatisticsData;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.dto.statistics.TotalStatistics;
+import searchengine.model.Lemma;
 import searchengine.model.Site;
 import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.SiteRepository;
@@ -14,6 +15,7 @@ import java.sql.Date;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static searchengine.model.IndexingStatus.INDEXED;
 
@@ -37,11 +39,12 @@ public class StatisticsServiceImpl implements StatisticsService {
             item.setName(site.getName());
             item.setUrl(site.getUrl());
             int pages = site.getPages().size();
-            int lemmas = lemmaRepository.countLemmaBySitesIs(site);
+            Optional<List<Lemma>> lemmaListOpt = lemmaRepository.getLemmaBySite(site);
+            int lemmas = lemmaListOpt.get().size();
             item.setPages(pages);
             item.setLemmas(lemmas);
             item.setStatus(site.getStatus().toString());
-            item.setError(site.getLastError());
+            item.setError(site.getLastError() == null ? "" : site.getLastError());
             item.setStatusTime(Date.from(site.getStatusTime().atZone(ZoneId.systemDefault()).toInstant()).getTime());
             total.setPages(total.getPages() + pages);
             total.setLemmas(total.getLemmas() + lemmas);

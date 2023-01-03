@@ -8,6 +8,8 @@ public enum ErrorMessage {
     PageIsOutOfConfigFile("Данная страница находится за пределами сайтов, указанных в конфигурационном файле"),
     SiteIsNotFoundByUrl("Не найден сайт по url"),
     SiteIsSeveralTimesUsedInConfig("Сайт несколько раз указан в конфигурационном файле"),
+    NoSitesDataInConfigFile("В конфигурационном файле остутствуют url сайтов для индексации"),
+    NoConnectionToSite("Отсутствует соединение с сайтом"),
 
     IndexingIsNotRun("Индексация не запущена");
 

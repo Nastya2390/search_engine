@@ -11,6 +11,7 @@ import searchengine.dto.indexing.PageRequest;
 import searchengine.dto.indexing.Response;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.services.IndexingService;
+import searchengine.services.SearchService;
 import searchengine.services.StatisticsService;
 
 @RestController
@@ -19,10 +20,12 @@ public class ApiController {
 
     private final StatisticsService statisticsService;
     private final IndexingService indexingService;
+    private final SearchService searchService;
 
-    public ApiController(StatisticsService statisticsService, IndexingService indexingService) {
+    public ApiController(StatisticsService statisticsService, IndexingService indexingService, SearchService searchService) {
         this.statisticsService = statisticsService;
         this.indexingService = indexingService;
+        this.searchService = searchService;
     }
 
     @GetMapping("/statistics")
@@ -43,6 +46,11 @@ public class ApiController {
     @PostMapping(value = "/indexPage", consumes = {MediaType.APPLICATION_JSON_VALUE})
     public ResponseEntity<Response> indexPage(@RequestBody PageRequest pageRequest) {
         return ResponseEntity.ok(indexingService.indexPage(pageRequest.getUrl()));
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<Response> search() {
+        return ResponseEntity.ok(searchService.search());
     }
 
 }
