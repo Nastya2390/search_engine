@@ -17,4 +17,8 @@ public interface LemmaRepository extends JpaRepository<Lemma, Integer> {
 
     Optional<List<Lemma>> getLemmaBySite(Site site);
 
+    Optional<List<Lemma>> getLemmaByLemma(String lemma);
+
+    List<Integer> getIdByLemma(String lemma);
+
 }

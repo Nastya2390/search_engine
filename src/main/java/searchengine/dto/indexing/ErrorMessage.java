@@ -10,6 +10,7 @@ public enum ErrorMessage {
     SiteIsSeveralTimesUsedInConfig("Сайт несколько раз указан в конфигурационном файле"),
     NoSitesDataInConfigFile("В конфигурационном файле остутствуют url сайтов для индексации"),
     NoConnectionToSite("Отсутствует соединение с сайтом"),
+    EmptySearchQuery("Задан пустой поисковый запрос"),
 
     IndexingIsNotRun("Индексация не запущена");
 

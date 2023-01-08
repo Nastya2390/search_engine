@@ -249,13 +249,15 @@ public class IndexingServiceImpl implements IndexingService {
         Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageId(page.getId());
         if (indexListOpt.isPresent()) {
             List<Index> indexList = indexListOpt.get();
+            List<Lemma> lemmaToDelete = new ArrayList<>();
             for (Index index : indexList) {
                 if (index.getLemma().getFrequency() == 1) {
-                    lemmaRepository.delete(index.getLemma());
+                    lemmaToDelete.add(index.getLemma());
                 } else {
                     index.getLemma().setFrequency(index.getLemma().getFrequency() - 1);
                 }
                 indexRepository.delete(index);
+                lemmaRepository.deleteAll(lemmaToDelete);
             }
         }
     }

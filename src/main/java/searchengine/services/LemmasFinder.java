@@ -16,6 +16,7 @@ public class LemmasFinder {
     public Map<String, Integer> getTextLemmas(String text) {
         Map<String, Integer> lemmas = new HashMap<>();
         String[] words = getRussianWords(text);
+        if(words.length == 1 && words[0].equals("")) return lemmas;
 
         for (String word : words) {
             List<String> morphInfos = luceneMorphology.getMorphInfo(word);
