@@ -2,12 +2,14 @@ package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.morphology.LuceneMorphology;
+import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+@Component
 @RequiredArgsConstructor
 public class LemmasFinder {
     private static final String[] particlesNames = new String[]{"МЕЖД", "ПРЕДЛ", "СОЮЗ", "МС", "ЧАСТ"};
@@ -16,7 +18,7 @@ public class LemmasFinder {
     public Map<String, Integer> getTextLemmas(String text) {
         Map<String, Integer> lemmas = new HashMap<>();
         String[] words = getRussianWords(text);
-        if(words.length == 1 && words[0].equals("")) return lemmas;
+        if(isEmptyArray(words)) return lemmas;
 
         for (String word : words) {
             List<String> morphInfos = luceneMorphology.getMorphInfo(word);
@@ -39,6 +41,10 @@ public class LemmasFinder {
         }
 
         return lemmas;
+    }
+
+    private boolean isEmptyArray(String[] words) {
+        return words.length == 1 && words[0].equals("");
     }
 
     public String deleteHtmlTags(String text) {

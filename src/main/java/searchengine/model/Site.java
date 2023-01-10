@@ -32,10 +32,10 @@ public class Site {
     @Column(nullable = true, unique = false, columnDefinition = "TEXT")
     private String lastError;
 
-    @Column(nullable = false, unique = false, columnDefinition = "VARCHAR(255)")
+    @Column(nullable = false, unique = true, columnDefinition = "VARCHAR(255)")
     private String url;
 
-    @Column(nullable = false, unique = false, columnDefinition = "VARCHAR(255)")
+    @Column(nullable = false, unique = true, columnDefinition = "VARCHAR(255)")
     private String name;
 
     @OneToMany(cascade = CascadeType.ALL, mappedBy = "site")

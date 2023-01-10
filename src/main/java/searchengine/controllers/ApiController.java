@@ -1,14 +1,11 @@
 package searchengine.controllers;
 
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import searchengine.dto.indexing.PageRequest;
 import searchengine.dto.indexing.Response;
 import searchengine.dto.search.SearchRequestParams;
 import searchengine.dto.statistics.StatisticsResponse;
@@ -45,9 +42,9 @@ public class ApiController {
         return ResponseEntity.ok(indexingService.stopIndexing());
     }
 
-    @PostMapping(value = "/indexPage", consumes = {MediaType.APPLICATION_JSON_VALUE})
-    public ResponseEntity<Response> indexPage(@RequestBody PageRequest pageRequest) {
-        return ResponseEntity.ok(indexingService.indexPage(pageRequest.getUrl()));
+    @PostMapping(value = "/indexPage")
+    public ResponseEntity<Response> indexPage(@RequestParam(value = "url", defaultValue = "") String url) {
+        return ResponseEntity.ok(indexingService.indexPage(url));
     }
 
     @GetMapping("/search")

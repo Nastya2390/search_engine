@@ -15,10 +15,11 @@ public interface SiteRepository extends JpaRepository<Site,Integer> {
     @Query("Select id from Site where name = :name")
     Optional<Integer> getIdBySiteName(String name);
 
+    Optional<Site> getSiteByName(String name);
+
     Optional<Site> getSiteByUrl(String url);
 
-    @Query("Select id from Site where status = :indexingStatus")
-    Optional<List<Integer>> getIdByIndexingStatus(IndexingStatus indexingStatus);
+    Optional<List<Site>> getSiteByStatus(IndexingStatus indexingStatus);
 
     Optional<Site> getSiteById(Integer siteId);
 }

@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -38,6 +39,7 @@ public class SearchServiceImpl implements SearchService {
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
     private final SiteRepository siteRepository;
+    private final LemmasFinder lemmasFinder;
     private final int OFFSET = 50;
     private final int SNIPPET_LENGTH = 400;
 
@@ -62,14 +64,12 @@ public class SearchServiceImpl implements SearchService {
                 .map(LemmaInfo::getLemmaList).flatMap(Collection::stream).collect(Collectors.toList());
         Map<Page, Double> pagesRelevance = computePagesRelativeRelevance(foundPages, requestLemmasList);
 
-        List<SearchData> data = fillResponseDataList(pagesRelevance, requestLemmasList,
-                params.getOffset(), params.getOffset() + params.getLimit());
+        List<SearchData> data = fillResponseDataList(pagesRelevance, requestLemmasList, params);
         return new SearchResponse(true, pagesRelevance.size(), data);
     }
 
     private Map<String, LemmaInfo> getLemmaFrequenciesInfo(SearchRequestParams params) {
         Map<String, LemmaInfo> searchInfo = new HashMap<>();
-        LemmasFinder lemmasFinder = new LemmasFinder(luceneMorphology);
         Map<String, Integer> requestLemmas = lemmasFinder.getTextLemmas(params.getQuery());
         for (String lemma : requestLemmas.keySet()) {
             Optional<List<Lemma>> lemmaListOpt = lemmaRepository.getLemmaByLemma(lemma);
@@ -176,18 +176,19 @@ public class SearchServiceImpl implements SearchService {
     }
 
     private List<SearchData> fillResponseDataList(Map<Page, Double> pagesRelevance,
-                                                  List<Lemma> requestLemmas, int startIndex, int endIndex) {
-        LemmasFinder lemmasFinder = new LemmasFinder(luceneMorphology);
+                                                  List<Lemma> requestLemmas, SearchRequestParams params) {
         List<SearchData> data = new ArrayList<>();
         int index = 0;
+        int startIndex = params.getOffset();
+        int endIndex = startIndex + params.getLimit();
         for (Page page : pagesRelevance.keySet()) {
             if (index >= startIndex && index < endIndex) {
                 SearchData searchData = new SearchData();
                 searchData.setSite(page.getSite().getUrl());
                 searchData.setSiteName(page.getSite().getName());
                 searchData.setUri(page.getPath());
-                searchData.setTitle(getPageTitle(page, requestLemmas, lemmasFinder));
-                searchData.setSnippet(getPageSnippet(page, requestLemmas, lemmasFinder));
+                searchData.setTitle(getPageTitle(page, requestLemmas));
+                searchData.setSnippet(getPageSnippet(page, requestLemmas));
                 searchData.setRelevance(pagesRelevance.get(page));
                 data.add(searchData);
                 System.out.println(index + " - " + page.getPath());
@@ -197,7 +198,7 @@ public class SearchServiceImpl implements SearchService {
         return data;
     }
 
-    private String getPageTitle(Page page, List<Lemma> requestLemmas, LemmasFinder lemmasFinder) {
+    private String getPageTitle(Page page, List<Lemma> requestLemmas) {
         Pattern pattern = Pattern.compile("<title>.+</title>");
         Matcher matcher = pattern.matcher(page.getContent());
         if (matcher.find()) {
@@ -208,7 +209,7 @@ public class SearchServiceImpl implements SearchService {
         return "";
     }
 
-    private String getPageSnippet(Page page, List<Lemma> requestLemmas, LemmasFinder lemmasFinder) {
+    private String getPageSnippet(Page page, List<Lemma> requestLemmas) {
         StringBuilder snippet = new StringBuilder();
         for (Lemma lemma : requestLemmas) {
             Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageIdAndLemmaId(page.getId(), lemma.getId());
@@ -255,16 +256,17 @@ public class SearchServiceImpl implements SearchService {
 
     private String boldLemmasInText(String text, List<Lemma> requestLemmas) {
         List<String> uniqueLemmas = requestLemmas.stream()
-                .map(Lemma::getLemma).distinct()
-                .map(x -> x.substring(0, x.length() - 1)).collect(Collectors.toList());
+                .map(Lemma::getLemma).distinct().collect(Collectors.toList());
         for (String lemma : uniqueLemmas) {
-            Pattern pattern = Pattern.compile(lemma + "[А-Яа-я]+[\\s\\p{P}<]{1}",
+            Pattern pattern = Pattern.compile(lemma.substring(0, lemma.length() - 1) + "[А-Яа-я]+[\\s\\p{P}<]{1}",
                     Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
             Matcher matcher = pattern.matcher(text);
 
             List<String> matches = new ArrayList<>();
             while (matcher.find()) {
-                matches.add(text.substring(matcher.start(), matcher.end()));
+                String word = text.substring(matcher.start(), matcher.end() - 1);
+                if (luceneMorphology.getNormalForms(word.toLowerCase(Locale.ROOT)).contains(lemma))
+                    matches.add(text.substring(matcher.start(), matcher.end()));
             }
             matches = matches.stream().distinct().sorted((o1, o2) -> o2.length() - o1.length()).collect(Collectors.toList());
 

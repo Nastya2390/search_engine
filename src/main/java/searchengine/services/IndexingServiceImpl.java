@@ -1,7 +1,6 @@
 package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
-import org.apache.lucene.morphology.LuceneMorphology;
 import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,10 +21,11 @@ import searchengine.repositories.SiteRepository;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -49,8 +49,8 @@ public class IndexingServiceImpl implements IndexingService {
     private final PageRepository pageRepository;
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
-    private final LuceneMorphology luceneMorphology;
     private final DOMConfiguration domConfiguration;
+    private final LemmasFinder lemmasFinder;
     private ForkJoinPool pool;
 
     @Override
@@ -61,7 +61,6 @@ public class IndexingServiceImpl implements IndexingService {
             return new IndexingResponseError(false, NoSitesDataInConfigFile.getValue());
         deleteSitesRelatedInformation(sitesList.stream().map(Site::getName).collect(Collectors.toList()));
         fillSitePagesInfo(fillSitesInfo(sitesList));
-        // todo если произошла ошибка и обход завершить не удалось, изменять статус на FAILED и вносить в поле last_error понятную информацию о произошедшей ошибке.
         return new IndexingResponse(true);
     }
 
@@ -86,22 +85,28 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     void deleteSitesRelatedInformation(List<String> siteNameList) {
+        List<searchengine.model.Site> siteList = new ArrayList<>();
         for (String siteName : siteNameList) {
-            Optional<Integer> siteId = siteRepository.getIdBySiteName(siteName);
-            if (siteId.isPresent()) {
-                Optional<searchengine.model.Site> siteOpt = siteRepository.getSiteById(siteId.get());
-                List<Page> pages = pageRepository.getPageBySiteId(siteId.get());
-                for (Page page : pages) {
-                    Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageId(page.getId());
-                    // todo проверить что не пустой
-                    indexRepository.deleteAll(indexListOpt.get());
-                }
-                pageRepository.deleteAll(pages);
-                Optional<List<Lemma>> lemmaListOpt = lemmaRepository.getLemmaBySite(siteOpt.get());
-                lemmaRepository.deleteAll(lemmaListOpt.get());
-                siteRepository.deleteById(siteId.get());
-            }
+            Optional<searchengine.model.Site> siteOpt = siteRepository.getSiteByName(siteName);
+            if (!siteOpt.isPresent()) return;
+            searchengine.model.Site site = siteOpt.get();
+            siteList.add(site);
+            deleteAllSitePages(site);
+            Optional<List<Lemma>> lemmaListOpt = lemmaRepository.getLemmaBySite(site);
+            if (!lemmaListOpt.isPresent() || lemmaListOpt.get().isEmpty()) return;
+            lemmaRepository.deleteAll(lemmaListOpt.get());
         }
+        siteRepository.deleteAll(siteList);
+    }
+
+    void deleteAllSitePages(searchengine.model.Site site) {
+        List<Page> pages = pageRepository.getPageBySiteId(site.getId());
+        for (Page page : pages) {
+            Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageId(page.getId());
+            if (!indexListOpt.isPresent() || indexListOpt.get().isEmpty()) return;
+            indexRepository.deleteAll(indexListOpt.get());
+        }
+        pageRepository.deleteAll(pages);
     }
 
     void fillSitePagesInfo(List<searchengine.model.Site> siteList) {
@@ -119,22 +124,7 @@ public class IndexingServiceImpl implements IndexingService {
         }
         pool = new ForkJoinPool();
         pool.invoke(new SiteMapConstructor(rootNodes, pageRepository, siteRepository, this));
-        //indexAllPages(siteList);
         changeSitesStatusToIndexed(siteList);
-    }
-
-    private void indexAllPages(List<searchengine.model.Site> siteList) {
-        for (searchengine.model.Site site : siteList) {
-            if (!SiteMapConstructor.isInterrupted) {
-                Optional<Integer> siteId = siteRepository.getIdBySiteName(site.getName());
-                if (!siteId.isPresent()) return;
-                List<Page> pages = pageRepository.getPageBySiteId(siteId.get());
-                for (Page page : pages) {
-                    if (isPageCodeValid(Objects.requireNonNull(page).getCode()))
-                        indexPage(site.getUrl() + page.getPath());
-                }
-            }
-        }
     }
 
     private void changeSitesStatusToIndexed(List<searchengine.model.Site> siteList) {
@@ -164,19 +154,16 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     private Response setFailedIndexingStatusForSites() {
-        Optional<List<Integer>> siteIds = siteRepository.getIdByIndexingStatus(IndexingStatus.INDEXING);
-        if (!siteIds.isPresent())
+        Optional<List<searchengine.model.Site>> siteListOpt = siteRepository.getSiteByStatus(IndexingStatus.INDEXING);
+        if (!siteListOpt.isPresent() || siteListOpt.get().isEmpty())
             return new IndexingResponseError(false, IndexingIsNotRun.getValue());
-        for (Integer id : siteIds.get()) {
-            Optional<searchengine.model.Site> siteOpt = siteRepository.getSiteById(id);
-            if (siteOpt.isPresent()) {
-                searchengine.model.Site site = siteOpt.get();
-                site.setStatus(IndexingStatus.FAILED);
-                site.setStatusTime(LocalDateTime.now());
-                site.setLastError(IndexingIsStoppedByUser.getValue());
-                siteRepository.save(site);
-            }
+        List<searchengine.model.Site> siteList = siteListOpt.get();
+        for (searchengine.model.Site site : siteList) {
+            site.setStatus(IndexingStatus.FAILED);
+            site.setStatusTime(LocalDateTime.now());
+            site.setLastError(IndexingIsStoppedByUser.getValue());
         }
+        siteRepository.saveAll(siteList);
         return new IndexingResponse(true);
     }
 
@@ -185,38 +172,56 @@ public class IndexingServiceImpl implements IndexingService {
         url = getUrlWithoutWWW(url);
         List<String> sitesUrls = sites.getSites().stream().map(Site::getUrl)
                 .map(this::getUrlWithoutWWW).filter(url::startsWith).collect(Collectors.toList());
-        String errorMessage = checkMatchedSites(sitesUrls);
-        if (errorMessage != null)
-            return new IndexingResponseError(false, errorMessage);
+        if (sitesUrls.isEmpty()) {
+            return new IndexingResponseError(false, PageIsOutOfConfigFile.getValue());
+        } else if (sitesUrls.size() > 1) {
+            return new IndexingResponseError(false, SiteIsSeveralTimesUsedInConfig.getValue());
+        }
         String siteUrl = sitesUrls.iterator().next();
         Optional<searchengine.model.Site> siteOpt = siteRepository.getSiteByUrl(siteUrl);
         if (!siteOpt.isPresent())
             return new IndexingResponseError(false, SiteIsNotFoundByUrl.getValue());
+        searchengine.model.Site site = siteOpt.get();
         String pagePath = url.replaceFirst(siteUrl, "");
-        Optional<Page> pageOpt = pageRepository.getPageByPathAndSite(pagePath, siteOpt.get());
-        pageOpt.ifPresent(page -> savePageLemmasToDB(page, siteOpt.get()));
-        //todo если старницы не было в базе - добавить
+        Optional<Page> pageOpt = pageRepository.getPageByPathAndSite(pagePath, site);
+        if (pageOpt.isPresent()) {
+            savePageLemmasToDB(pageOpt.get());
+        } else {
+            addNewPageToDB(site, pagePath);
+        }
         return new IndexingResponse(true);
     }
 
-    private String checkMatchedSites(List<String> sitesUrls) {
-        if (sitesUrls.isEmpty()) {
-            return PageIsOutOfConfigFile.getValue();
-        } else if (sitesUrls.size() > 1) {
-            return SiteIsSeveralTimesUsedInConfig.getValue();
+    private void addNewPageToDB(searchengine.model.Site site, String pagePath) {
+        String urlAndPath = site.getUrl() + pagePath;
+        Document doc = domConfiguration.getDocument(urlAndPath);
+        if (doc != null) {
+            Page page = Page.constructPage(pagePath, site, doc);
+            pageRepository.save(page);
+            savePageLemmasToDB(page);
         }
-        return null;
     }
 
-    private void savePageLemmasToDB(Page page, searchengine.model.Site site) {
+    public void savePageLemmasToDB(Page page) {
+        if(!isPageCodeValid(page.getCode())) return;
         deletePreviousPageIndexingInfo(page);
-        LemmasFinder lemmasFinder = new LemmasFinder(luceneMorphology);
+        searchengine.model.Site site = page.getSite();
         String textWithoutTags = lemmasFinder.deleteHtmlTags(page.getContent());
         Map<String, Integer> lemmas = lemmasFinder.getTextLemmas(textWithoutTags);
+        List<Index> indexList = new ArrayList<>();
         for (String key : lemmas.keySet()) {
             Lemma lemma = fillLemmaInfo(site, key);
-            fillIndexInfo(page, lemma, lemmas.get(key));
+            Index index = new Index();
+            index.setPage(page);
+            index.setLemma(lemma);
+            index.setRank(lemmas.get(key));
+            indexList.add(index);
         }
+        indexRepository.saveAll(indexList);
+    }
+
+    private boolean isPageCodeValid(int code) {
+        return !String.valueOf(code).substring(0, 1).matches("[4,5]");
     }
 
     @Transactional
@@ -237,33 +242,20 @@ public class IndexingServiceImpl implements IndexingService {
         return lemma;
     }
 
-    private void fillIndexInfo(Page page, Lemma lemma, double rank) {
-        Index index = new Index();
-        index.setPage(page);
-        index.setLemma(lemma);
-        index.setRank(rank);
-        indexRepository.save(index);
-    }
-
     private void deletePreviousPageIndexingInfo(Page page) {
         Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageId(page.getId());
-        if (indexListOpt.isPresent()) {
-            List<Index> indexList = indexListOpt.get();
-            List<Lemma> lemmaToDelete = new ArrayList<>();
-            for (Index index : indexList) {
-                if (index.getLemma().getFrequency() == 1) {
-                    lemmaToDelete.add(index.getLemma());
-                } else {
-                    index.getLemma().setFrequency(index.getLemma().getFrequency() - 1);
-                }
-                indexRepository.delete(index);
-                lemmaRepository.deleteAll(lemmaToDelete);
+        if (!indexListOpt.isPresent()) return;
+        List<Index> indexList = indexListOpt.get();
+        Set<Lemma> lemmasToDelete = new HashSet<>();
+        for (Index index : indexList) {
+            if (index.getLemma().getFrequency() == 1) {
+                lemmasToDelete.add(index.getLemma());
+            } else {
+                index.getLemma().setFrequency(index.getLemma().getFrequency() - 1);
             }
         }
-    }
-
-    public boolean isPageCodeValid(int code) {
-        return !String.valueOf(code).startsWith("[4,5]");
+        indexRepository.deleteAll(indexList);
+        lemmaRepository.deleteAll(lemmasToDelete);
     }
 
 }

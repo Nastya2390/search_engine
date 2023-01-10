@@ -32,7 +32,17 @@ public class StatisticsServiceImpl implements StatisticsService {
         TotalStatistics total = new TotalStatistics();
         total.setSites(sitesList.size());
         total.setIndexing(getSearchEngineIndexingStatus(sitesList));
+        StatisticsResponse response = new StatisticsResponse();
+        StatisticsData data = new StatisticsData();
+        data.setTotal(total);
+        List<DetailedStatisticsItem> detailed = fillDetailedStatisticsItemList(sitesList, total);
+        data.setDetailed(detailed);
+        response.setStatistics(data);
+        response.setResult(true);
+        return response;
+    }
 
+    private List<DetailedStatisticsItem> fillDetailedStatisticsItemList(List<Site> sitesList, TotalStatistics total) {
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
         for (Site site : sitesList) {
             DetailedStatisticsItem item = new DetailedStatisticsItem();
@@ -40,7 +50,7 @@ public class StatisticsServiceImpl implements StatisticsService {
             item.setUrl(site.getUrl());
             int pages = site.getPages().size();
             Optional<List<Lemma>> lemmaListOpt = lemmaRepository.getLemmaBySite(site);
-            int lemmas = lemmaListOpt.get().size();
+            int lemmas = lemmaListOpt.map(List::size).orElse(0);
             item.setPages(pages);
             item.setLemmas(lemmas);
             item.setStatus(site.getStatus().toString());
@@ -50,14 +60,7 @@ public class StatisticsServiceImpl implements StatisticsService {
             total.setLemmas(total.getLemmas() + lemmas);
             detailed.add(item);
         }
-
-        StatisticsResponse response = new StatisticsResponse();
-        StatisticsData data = new StatisticsData();
-        data.setTotal(total);
-        data.setDetailed(detailed);
-        response.setStatistics(data);
-        response.setResult(true);
-        return response;
+        return detailed;
     }
 
     Boolean getSearchEngineIndexingStatus(List<Site> sitesList) {
