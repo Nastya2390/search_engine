@@ -3,11 +3,9 @@ package searchengine.services;
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.springframework.stereotype.Service;
-import searchengine.dto.search.Response;
 import searchengine.dto.search.SearchData;
 import searchengine.dto.search.SearchRequestParams;
 import searchengine.dto.search.SearchResponse;
-import searchengine.dto.search.SearchResponseError;
 import searchengine.model.Index;
 import searchengine.model.Lemma;
 import searchengine.model.Page;
@@ -29,8 +27,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static searchengine.dto.indexing.ErrorMessage.EmptySearchQuery;
-
 @Service
 @RequiredArgsConstructor
 public class SearchServiceImpl implements SearchService {
@@ -42,11 +38,12 @@ public class SearchServiceImpl implements SearchService {
     private final LemmasFinder lemmasFinder;
     private final int OFFSET = 50;
     private final int SNIPPET_LENGTH = 400;
+    private final double LEMMA_FREQUENCY_COEFFICIENT = 0.7;
 
     @Override
-    public Response search(SearchRequestParams params) {
+    public SearchResponse search(SearchRequestParams params) {
         if (params.getQuery().equals(""))
-            return new SearchResponseError(false, EmptySearchQuery.getValue());
+            return new SearchResponse(true, 0, Collections.emptyList());
         Map<String, LemmaInfo> searchInfo = getLemmaFrequenciesInfo(params);
         if (searchInfo.isEmpty())
             return new SearchResponse(true, 0, Collections.emptyList());
@@ -99,7 +96,7 @@ public class SearchServiceImpl implements SearchService {
         }
         Map<String, LemmaInfo> result = new HashMap<>();
         for (String lemma : lemmas.keySet()) {
-            if (lemmas.get(lemma).getCommonFrequency() < frequencyLimit * 0.7)
+            if (lemmas.get(lemma).getCommonFrequency() < frequencyLimit * LEMMA_FREQUENCY_COEFFICIENT)
                 result.put(lemma, lemmas.get(lemma));
         }
         return result;

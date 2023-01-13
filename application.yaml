@@ -1,5 +1,9 @@
 server:
   port: 8080
+  error:
+    include-message: always
+    include-exeption: true
+    include-stacktrace: always
 
 spring:
   datasource:

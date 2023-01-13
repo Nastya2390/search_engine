@@ -1,4 +1,4 @@
-package searchengine.dto.indexing;
+package searchengine.dto;
 
 public enum ErrorMessage {
 
@@ -10,7 +10,7 @@ public enum ErrorMessage {
     SiteIsSeveralTimesUsedInConfig("Сайт несколько раз указан в конфигурационном файле"),
     NoSitesDataInConfigFile("В конфигурационном файле остутствуют url сайтов для индексации"),
     NoConnectionToSite("Отсутствует соединение с сайтом"),
-    EmptySearchQuery("Задан пустой поисковый запрос"),
+    IndexingIsInProcess("Индексация уже запущена. Перед запуском переиндексации нужно остановить текущий запуск индексации"),
 
     IndexingIsNotRun("Индексация не запущена");
 

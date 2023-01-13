@@ -5,7 +5,7 @@ import lombok.Data;
 import java.util.List;
 
 @Data
-public class SearchResponse implements Response {
+public class SearchResponse {
     private boolean result;
     private long count;
     List<SearchData> data;

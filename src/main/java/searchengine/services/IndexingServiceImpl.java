@@ -1,15 +1,18 @@
 package searchengine.services;
 
+import exception.BadRequestException;
+import exception.NotFoundException;
+import exception.ServerErrorException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.DOMConfiguration;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.dto.indexing.IndexingResponse;
-import searchengine.dto.indexing.IndexingResponseError;
-import searchengine.dto.indexing.Response;
 import searchengine.model.Index;
 import searchengine.model.IndexingStatus;
 import searchengine.model.Lemma;
@@ -19,6 +22,7 @@ import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 
+import javax.persistence.NonUniqueResultException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -30,16 +34,18 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static searchengine.dto.indexing.ErrorMessage.IndexingIsNotRun;
-import static searchengine.dto.indexing.ErrorMessage.IndexingIsNotStopped;
-import static searchengine.dto.indexing.ErrorMessage.IndexingIsStoppedByUser;
-import static searchengine.dto.indexing.ErrorMessage.InterruptedExceptionOccuredOnStopIndexing;
-import static searchengine.dto.indexing.ErrorMessage.NoConnectionToSite;
-import static searchengine.dto.indexing.ErrorMessage.NoSitesDataInConfigFile;
-import static searchengine.dto.indexing.ErrorMessage.PageIsOutOfConfigFile;
-import static searchengine.dto.indexing.ErrorMessage.SiteIsNotFoundByUrl;
-import static searchengine.dto.indexing.ErrorMessage.SiteIsSeveralTimesUsedInConfig;
+import static searchengine.dto.ErrorMessage.IndexingIsInProcess;
+import static searchengine.dto.ErrorMessage.IndexingIsNotRun;
+import static searchengine.dto.ErrorMessage.IndexingIsNotStopped;
+import static searchengine.dto.ErrorMessage.IndexingIsStoppedByUser;
+import static searchengine.dto.ErrorMessage.InterruptedExceptionOccuredOnStopIndexing;
+import static searchengine.dto.ErrorMessage.NoConnectionToSite;
+import static searchengine.dto.ErrorMessage.NoSitesDataInConfigFile;
+import static searchengine.dto.ErrorMessage.PageIsOutOfConfigFile;
+import static searchengine.dto.ErrorMessage.SiteIsNotFoundByUrl;
+import static searchengine.dto.ErrorMessage.SiteIsSeveralTimesUsedInConfig;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class IndexingServiceImpl implements IndexingService {
@@ -54,14 +60,22 @@ public class IndexingServiceImpl implements IndexingService {
     private ForkJoinPool pool;
 
     @Override
-    public Response startIndexing() {
+    public IndexingResponse startIndexing() {
         SiteMapConstructor.isInterrupted = false;
         List<Site> sitesList = sites.getSites();
         if (sitesList.isEmpty())
-            return new IndexingResponseError(false, NoSitesDataInConfigFile.getValue());
+            throw new NotFoundException(HttpStatus.NOT_FOUND, NoSitesDataInConfigFile.getValue());
+        if (isIndexingInProcess()) {
+            throw new ServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, IndexingIsInProcess.getValue());
+        }
         deleteSitesRelatedInformation(sitesList.stream().map(Site::getName).collect(Collectors.toList()));
         fillSitePagesInfo(fillSitesInfo(sitesList));
         return new IndexingResponse(true);
+    }
+
+    private boolean isIndexingInProcess() {
+        Optional<List<searchengine.model.Site>> siteListOpt = siteRepository.getSiteByStatus(IndexingStatus.INDEXING);
+        return pool != null && siteListOpt.isPresent() && siteListOpt.get().size() > 0;
     }
 
     private List<searchengine.model.Site> fillSitesInfo(List<Site> sitesList) {
@@ -84,7 +98,7 @@ public class IndexingServiceImpl implements IndexingService {
                 .replace("http://www.", "http://");
     }
 
-    void deleteSitesRelatedInformation(List<String> siteNameList) {
+    void deleteSitesRelatedInformation(List<String> siteNameList) throws NonUniqueResultException {
         List<searchengine.model.Site> siteList = new ArrayList<>();
         for (String siteName : siteNameList) {
             Optional<searchengine.model.Site> siteOpt = siteRepository.getSiteByName(siteName);
@@ -128,6 +142,7 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     private void changeSitesStatusToIndexed(List<searchengine.model.Site> siteList) {
+        // todo исключить сайты с ошибкой индексации
         if (!SiteMapConstructor.isInterrupted) {
             for (searchengine.model.Site site : siteList) {
                 site.setStatus(IndexingStatus.INDEXED);
@@ -137,26 +152,27 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     @Override
-    public Response stopIndexing() {
+    public IndexingResponse stopIndexing() {
         try {
             if (pool == null)
-                return new IndexingResponseError(false, IndexingIsNotRun.getValue());
+                throw new BadRequestException(HttpStatus.BAD_REQUEST, IndexingIsNotRun.getValue());
             pool.shutdownNow();
             if (pool.awaitTermination(1, TimeUnit.MINUTES)) {
-                return setFailedIndexingStatusForSites();
+                setFailedIndexingStatusForSites();
             } else {
-                return new IndexingResponseError(false, IndexingIsNotStopped.getValue());
+                throw new ServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, IndexingIsNotStopped.getValue());
             }
-        } catch (InterruptedException ie) {
-            ie.printStackTrace();
-            return new IndexingResponseError(false, InterruptedExceptionOccuredOnStopIndexing.getValue());
+            return new IndexingResponse(true);
+        } catch (InterruptedException e) {
+            log.error(e.getMessage(), e);
+            throw new ServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, InterruptedExceptionOccuredOnStopIndexing.getValue());
         }
     }
 
-    private Response setFailedIndexingStatusForSites() {
+    private void setFailedIndexingStatusForSites() {
         Optional<List<searchengine.model.Site>> siteListOpt = siteRepository.getSiteByStatus(IndexingStatus.INDEXING);
         if (!siteListOpt.isPresent() || siteListOpt.get().isEmpty())
-            return new IndexingResponseError(false, IndexingIsNotRun.getValue());
+            throw new BadRequestException(HttpStatus.BAD_REQUEST, IndexingIsNotRun.getValue());
         List<searchengine.model.Site> siteList = siteListOpt.get();
         for (searchengine.model.Site site : siteList) {
             site.setStatus(IndexingStatus.FAILED);
@@ -164,23 +180,22 @@ public class IndexingServiceImpl implements IndexingService {
             site.setLastError(IndexingIsStoppedByUser.getValue());
         }
         siteRepository.saveAll(siteList);
-        return new IndexingResponse(true);
     }
 
     @Override
-    public Response indexPage(String url) {
+    public IndexingResponse indexPage(String url) {
         url = getUrlWithoutWWW(url);
         List<String> sitesUrls = sites.getSites().stream().map(Site::getUrl)
                 .map(this::getUrlWithoutWWW).filter(url::startsWith).collect(Collectors.toList());
         if (sitesUrls.isEmpty()) {
-            return new IndexingResponseError(false, PageIsOutOfConfigFile.getValue());
+            throw new BadRequestException(HttpStatus.BAD_REQUEST, PageIsOutOfConfigFile.getValue());
         } else if (sitesUrls.size() > 1) {
-            return new IndexingResponseError(false, SiteIsSeveralTimesUsedInConfig.getValue());
+            throw new ServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, SiteIsSeveralTimesUsedInConfig.getValue());
         }
         String siteUrl = sitesUrls.iterator().next();
         Optional<searchengine.model.Site> siteOpt = siteRepository.getSiteByUrl(siteUrl);
         if (!siteOpt.isPresent())
-            return new IndexingResponseError(false, SiteIsNotFoundByUrl.getValue());
+            throw new NotFoundException(HttpStatus.NOT_FOUND, SiteIsNotFoundByUrl.getValue());
         searchengine.model.Site site = siteOpt.get();
         String pagePath = url.replaceFirst(siteUrl, "");
         Optional<Page> pageOpt = pageRepository.getPageByPathAndSite(pagePath, site);
@@ -203,7 +218,7 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     public void savePageLemmasToDB(Page page) {
-        if(!isPageCodeValid(page.getCode())) return;
+        if (!isPageCodeValid(page.getCode())) return;
         deletePreviousPageIndexingInfo(page);
         searchengine.model.Site site = page.getSite();
         String textWithoutTags = lemmasFinder.deleteHtmlTags(page.getContent());
