@@ -212,11 +212,12 @@ public class SearchServiceImpl implements SearchService {
             Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageIdAndLemmaId(page.getId(), lemma.getId());
             if (indexListOpt.isPresent() && indexListOpt.get().size() == 1) {
                 String pageTextWithoutTags = lemmasFinder.deleteHtmlTags(page.getContent());
-                pageTextWithoutTags = pageTextWithoutTags.replaceAll("\\s+", " ");
-                int lemmaIndex = pageTextWithoutTags.indexOf(lemma.getLemma());
+                String russianTextWithoutTags = lemmasFinder.getRussianText(pageTextWithoutTags);
+                russianTextWithoutTags = russianTextWithoutTags.replaceAll("\\s+", " ");
+                int lemmaIndex = russianTextWithoutTags.indexOf(lemma.getLemma());
                 if (lemmaIndex == -1)
-                    lemmaIndex = pageTextWithoutTags.indexOf(lemma.getLemma().substring(0, lemma.getLemma().length() - 1));
-                snippet.append(constructSnippet(lemmaIndex, pageTextWithoutTags)).append("... ");
+                    lemmaIndex = russianTextWithoutTags.indexOf(lemma.getLemma().substring(0, lemma.getLemma().length() - 1));
+                snippet.append(constructSnippet(lemmaIndex, russianTextWithoutTags)).append("... ");
             }
         }
         return boldLemmasInText(snippet.toString(), requestLemmas);

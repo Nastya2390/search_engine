@@ -55,6 +55,12 @@ public class LemmasFinder {
                 .replaceAll("</[^>]+>", " ");
     }
 
+    public String getRussianText(String text) {
+        return text.toLowerCase(Locale.ROOT)
+                .replaceAll("([^а-я\\s])", " ")
+                .trim();
+    }
+
     private String[] getRussianWords(String text) {
         return text.toLowerCase(Locale.ROOT)
                 .replaceAll("([^а-я\\s])", " ")
