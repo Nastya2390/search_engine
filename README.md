@@ -6,7 +6,7 @@
 
 ## Стэк используемых технологий
 
-###Бэкенд
+### Бэкенд
 - Java Core
 - Spring Boot (Spring, Apache Tomcat)
 - Hibernate - java библиотека для решения ORM задач, реализация спецификации JPA

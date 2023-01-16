@@ -20,7 +20,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -31,7 +30,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SearchServiceImpl implements SearchService {
 
-    private final LuceneMorphology luceneMorphology;
+    private final LuceneMorphology luceneMorphologyRus;
+    private final LuceneMorphology luceneMorphologyEng;
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
     private final SiteRepository siteRepository;
@@ -67,7 +67,7 @@ public class SearchServiceImpl implements SearchService {
 
     private Map<String, LemmaInfo> getLemmaFrequenciesInfo(SearchRequestParams params) {
         Map<String, LemmaInfo> searchInfo = new HashMap<>();
-        Map<String, Integer> requestLemmas = lemmasFinder.getTextLemmas(params.getQuery());
+        Map<String, Integer> requestLemmas = lemmasFinder.getTextRusEngLemmas(params.getQuery());
         for (String lemma : requestLemmas.keySet()) {
             Optional<List<Lemma>> lemmaListOpt = lemmaRepository.getLemmaByLemma(lemma);
             if (!lemmaListOpt.isPresent() || lemmaListOpt.get().isEmpty())
@@ -212,12 +212,12 @@ public class SearchServiceImpl implements SearchService {
             Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageIdAndLemmaId(page.getId(), lemma.getId());
             if (indexListOpt.isPresent() && indexListOpt.get().size() == 1) {
                 String pageTextWithoutTags = lemmasFinder.deleteHtmlTags(page.getContent());
-                String russianTextWithoutTags = lemmasFinder.getRussianText(pageTextWithoutTags);
-                russianTextWithoutTags = russianTextWithoutTags.replaceAll("\\s+", " ");
-                int lemmaIndex = russianTextWithoutTags.indexOf(lemma.getLemma());
+                String rusEngTextWithoutTags = lemmasFinder.getRusEngText(pageTextWithoutTags);
+                rusEngTextWithoutTags = rusEngTextWithoutTags.replaceAll("\\s+", " ");
+                int lemmaIndex = rusEngTextWithoutTags.indexOf(lemma.getLemma());
                 if (lemmaIndex == -1)
-                    lemmaIndex = russianTextWithoutTags.indexOf(lemma.getLemma().substring(0, lemma.getLemma().length() - 1));
-                snippet.append(constructSnippet(lemmaIndex, russianTextWithoutTags)).append("... ");
+                    lemmaIndex = rusEngTextWithoutTags.indexOf(lemma.getLemma().substring(0, lemma.getLemma().length() - 1));
+                snippet.append(constructSnippet(lemmaIndex, rusEngTextWithoutTags)).append("... ");
             }
         }
         return boldLemmasInText(snippet.toString(), requestLemmas);
@@ -256,15 +256,16 @@ public class SearchServiceImpl implements SearchService {
         List<String> uniqueLemmas = requestLemmas.stream()
                 .map(Lemma::getLemma).distinct().collect(Collectors.toList());
         for (String lemma : uniqueLemmas) {
-            Pattern pattern = Pattern.compile(lemma.substring(0, lemma.length() - 1) + "[А-Яа-я]+[\\s\\p{P}<]{1}",
+            Pattern pattern = Pattern.compile(lemma.substring(0, lemma.length() - 1) + "[А-Яа-яa-zA-Z]+[\\s\\p{P}<]{1}",
                     Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
             Matcher matcher = pattern.matcher(text);
 
             List<String> matches = new ArrayList<>();
             while (matcher.find()) {
-                String word = text.substring(matcher.start(), matcher.end() - 1);
-                if (luceneMorphology.getNormalForms(word.toLowerCase(Locale.ROOT)).contains(lemma))
-                    matches.add(text.substring(matcher.start(), matcher.end()));
+//                String word = text.substring(matcher.start(), matcher.end() - 1);
+//                if (luceneMorphologyRus.getNormalForms(word.toLowerCase(Locale.ROOT)).contains(lemma) ||
+//                        luceneMorphologyEng.getNormalForms(word.toLowerCase(Locale.ROOT)).contains(lemma))
+                matches.add(text.substring(matcher.start(), matcher.end()));
             }
             matches = matches.stream().distinct().sorted((o1, o2) -> o2.length() - o1.length()).collect(Collectors.toList());
 

@@ -21,7 +21,7 @@ spring:
 dom-settings:
   userAgent: NastyaSearchBot
   referer: https://www.google.com
-  delayMs: 250
+  delayMs: 150
 
 indexing-settings:
   sites:
