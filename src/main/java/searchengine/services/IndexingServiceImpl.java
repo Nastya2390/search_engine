@@ -221,8 +221,7 @@ public class IndexingServiceImpl implements IndexingService {
         if (!isPageCodeValid(page.getCode())) return;
         deletePreviousPageIndexingInfo(page);
         searchengine.model.Site site = page.getSite();
-        String textWithoutTags = lemmasFinder.deleteHtmlTags(page.getContent());
-        Map<String, Integer> lemmas = lemmasFinder.getTextLemmas(textWithoutTags);
+        Map<String, Integer> lemmas = lemmasFinder.getTextRusEngLemmas(page.getContent());
         List<Index> indexList = new ArrayList<>();
         for (String key : lemmas.keySet()) {
             Lemma lemma = fillLemmaInfo(site, key);

@@ -32,6 +32,9 @@ public class Page {
     @Column(nullable = false, unique = false, columnDefinition = "MEDIUMTEXT")
     private String content;
 
+    @Column(nullable = false, unique = false, columnDefinition = "VARCHAR(255)")
+    private String title;
+
     @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "site_id", nullable = false)
     private Site site;
@@ -40,7 +43,8 @@ public class Page {
         Page page = new Page();
         page.setSite(site);
         page.setPath(path);
-        page.setContent(doc.toString());
+        page.setContent(doc.text());
+        page.setTitle(doc.title());
         page.setCode(doc.connection().response().statusCode());
         return page;
     }

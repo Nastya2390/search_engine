@@ -1,7 +1,6 @@
 package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
-import org.apache.lucene.morphology.LuceneMorphology;
 import org.springframework.stereotype.Service;
 import searchengine.dto.search.SearchData;
 import searchengine.dto.search.SearchRequestParams;
@@ -30,8 +29,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SearchServiceImpl implements SearchService {
 
-    private final LuceneMorphology luceneMorphologyRus;
-    private final LuceneMorphology luceneMorphologyEng;
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
     private final SiteRepository siteRepository;
@@ -184,7 +181,7 @@ public class SearchServiceImpl implements SearchService {
                 searchData.setSite(page.getSite().getUrl());
                 searchData.setSiteName(page.getSite().getName());
                 searchData.setUri(page.getPath());
-                searchData.setTitle(getPageTitle(page, requestLemmas));
+                searchData.setTitle(boldLemmasInText(page.getTitle(), requestLemmas));
                 searchData.setSnippet(getPageSnippet(page, requestLemmas));
                 searchData.setRelevance(pagesRelevance.get(page));
                 data.add(searchData);
@@ -195,24 +192,12 @@ public class SearchServiceImpl implements SearchService {
         return data;
     }
 
-    private String getPageTitle(Page page, List<Lemma> requestLemmas) {
-        Pattern pattern = Pattern.compile("<title>.+</title>");
-        Matcher matcher = pattern.matcher(page.getContent());
-        if (matcher.find()) {
-            String title = page.getContent().substring(matcher.start(), matcher.end());
-            title = lemmasFinder.deleteHtmlTags(title);
-            return boldLemmasInText(title, requestLemmas);
-        }
-        return "";
-    }
-
     private String getPageSnippet(Page page, List<Lemma> requestLemmas) {
         StringBuilder snippet = new StringBuilder();
         for (Lemma lemma : requestLemmas) {
             Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageIdAndLemmaId(page.getId(), lemma.getId());
             if (indexListOpt.isPresent() && indexListOpt.get().size() == 1) {
-                String pageTextWithoutTags = lemmasFinder.deleteHtmlTags(page.getContent());
-                String rusEngTextWithoutTags = lemmasFinder.getRusEngText(pageTextWithoutTags);
+                String rusEngTextWithoutTags = lemmasFinder.getRusEngText(page.getContent());
                 rusEngTextWithoutTags = rusEngTextWithoutTags.replaceAll("\\s+", " ");
                 int lemmaIndex = rusEngTextWithoutTags.indexOf(lemma.getLemma());
                 if (lemmaIndex == -1)
@@ -262,9 +247,6 @@ public class SearchServiceImpl implements SearchService {
 
             List<String> matches = new ArrayList<>();
             while (matcher.find()) {
-//                String word = text.substring(matcher.start(), matcher.end() - 1);
-//                if (luceneMorphologyRus.getNormalForms(word.toLowerCase(Locale.ROOT)).contains(lemma) ||
-//                        luceneMorphologyEng.getNormalForms(word.toLowerCase(Locale.ROOT)).contains(lemma))
                 matches.add(text.substring(matcher.start(), matcher.end()));
             }
             matches = matches.stream().distinct().sorted((o1, o2) -> o2.length() - o1.length()).collect(Collectors.toList());

@@ -27,7 +27,7 @@ public class LemmasFinder {
     }
 
     public Map<String, Integer> getTextLemmas(String[] words,
-                                LuceneMorphology luceneMorphology, String[] particlesNames) {
+                                              LuceneMorphology luceneMorphology, String[] particlesNames) {
         Map<String, Integer> lemmas = new HashMap<>();
         if (isEmptyArray(words)) return lemmas;
 
@@ -41,7 +41,7 @@ public class LemmasFinder {
                 continue;
             }
             String normalWord = baseForms.get(0);
-            if(normalWord.length() < 2) {
+            if (normalWord.length() < 2) {
                 continue;
             }
             if (lemmas.containsKey(normalWord)) {
@@ -55,18 +55,6 @@ public class LemmasFinder {
 
     private boolean isEmptyArray(String[] words) {
         return words.length == 1 && words[0].equals("");
-    }
-
-    public String deleteHtmlTags(String text) {
-        return text.replaceAll("\\n", " ")
-                .replaceAll("</title>[.]+</head>", " ")
-                .replaceAll("<script[^<]+</script>", " ")
-                .replaceAll("<noscript[^<]+</noscript>", " ")
-                .replaceAll("<footer[.]+</footer>", " ")
-                .replaceAll("<!--[.]+-->", " ")
-                .replaceAll("&nbsp;", " ")
-                .replaceAll("<[^>]+>", " ")
-                .replaceAll("</[^>]+>", " ");
     }
 
     public String getRusEngText(String text) {
