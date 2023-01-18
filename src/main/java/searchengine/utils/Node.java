@@ -1,4 +1,4 @@
-package searchengine.services;
+package searchengine.utils;
 
 import lombok.Data;
 import org.jsoup.nodes.Document;

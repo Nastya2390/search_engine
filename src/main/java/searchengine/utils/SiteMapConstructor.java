@@ -1,8 +1,9 @@
-package searchengine.services;
+package searchengine.utils;
 
 import searchengine.model.Page;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
+import searchengine.services.IndexingService;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -16,7 +17,7 @@ public class SiteMapConstructor extends RecursiveAction {
     private final PageRepository pageRepository;
     private final SiteRepository siteRepository;
     private final IndexingService indexingService;
-    volatile static Boolean isInterrupted = false;
+    public volatile static Boolean isInterrupted = false;
 
     public SiteMapConstructor(List<Node> rootNodes, PageRepository pageRepository,
                               SiteRepository siteRepository,

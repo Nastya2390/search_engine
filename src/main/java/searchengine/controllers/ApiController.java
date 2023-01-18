@@ -1,8 +1,8 @@
 package searchengine.controllers;
 
-import exception.BadRequestException;
-import exception.NotFoundException;
-import exception.ServerErrorException;
+import searchengine.exceptions.BadRequestException;
+import searchengine.exceptions.NotFoundException;
+import searchengine.exceptions.ServerErrorException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

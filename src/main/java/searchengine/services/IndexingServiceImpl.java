@@ -1,8 +1,8 @@
 package searchengine.services;
 
-import exception.BadRequestException;
-import exception.NotFoundException;
-import exception.ServerErrorException;
+import searchengine.exceptions.BadRequestException;
+import searchengine.exceptions.NotFoundException;
+import searchengine.exceptions.ServerErrorException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
@@ -21,6 +21,9 @@ import searchengine.repositories.IndexRepository;
 import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
+import searchengine.utils.LemmasFinder;
+import searchengine.utils.Node;
+import searchengine.utils.SiteMapConstructor;
 
 import javax.persistence.NonUniqueResultException;
 import java.time.LocalDateTime;
@@ -42,7 +45,6 @@ import static searchengine.dto.ErrorMessage.InterruptedExceptionOccuredOnStopInd
 import static searchengine.dto.ErrorMessage.NoConnectionToSite;
 import static searchengine.dto.ErrorMessage.NoSitesDataInConfigFile;
 import static searchengine.dto.ErrorMessage.PageIsOutOfConfigFile;
-import static searchengine.dto.ErrorMessage.SiteIsNotFoundByUrl;
 import static searchengine.dto.ErrorMessage.SiteIsSeveralTimesUsedInConfig;
 
 @Slf4j
@@ -184,19 +186,23 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public IndexingResponse indexPage(String url) {
-        url = getUrlWithoutWWW(url);
-        List<String> sitesUrls = sites.getSites().stream().map(Site::getUrl)
-                .map(this::getUrlWithoutWWW).filter(url::startsWith).collect(Collectors.toList());
-        if (sitesUrls.isEmpty()) {
+        final String urlWithoutWWW = getUrlWithoutWWW(url);
+        List<Site> sitesList = sites.getSites().stream()
+                .filter(x -> urlWithoutWWW.startsWith(getUrlWithoutWWW(x.getUrl()))).collect(Collectors.toList());
+        if (sitesList.isEmpty()) {
             throw new BadRequestException(HttpStatus.BAD_REQUEST, PageIsOutOfConfigFile.getValue());
-        } else if (sitesUrls.size() > 1) {
+        } else if (sitesList.size() > 1) {
             throw new ServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, SiteIsSeveralTimesUsedInConfig.getValue());
         }
-        String siteUrl = sitesUrls.iterator().next();
+        String siteUrl = getUrlWithoutWWW(sitesList.iterator().next().getUrl());
         Optional<searchengine.model.Site> siteOpt = siteRepository.getSiteByUrl(siteUrl);
-        if (!siteOpt.isPresent())
-            throw new NotFoundException(HttpStatus.NOT_FOUND, SiteIsNotFoundByUrl.getValue());
-        searchengine.model.Site site = siteOpt.get();
+        searchengine.model.Site site;
+        if (!siteOpt.isPresent()) {
+            List<searchengine.model.Site> sites = fillSitesInfo(sitesList);
+            site = sites.iterator().next();
+        } else {
+            site = siteOpt.get();
+        }
         String pagePath = url.replaceFirst(siteUrl, "");
         Optional<Page> pageOpt = pageRepository.getPageByPathAndSite(pagePath, site);
         if (pageOpt.isPresent()) {

@@ -2,6 +2,7 @@ package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import searchengine.dto.search.LemmaInfo;
 import searchengine.dto.search.SearchData;
 import searchengine.dto.search.SearchRequestParams;
 import searchengine.dto.search.SearchResponse;
@@ -12,6 +13,7 @@ import searchengine.model.Site;
 import searchengine.repositories.IndexRepository;
 import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.SiteRepository;
+import searchengine.utils.LemmasFinder;
 
 import java.util.ArrayList;
 import java.util.Collection;

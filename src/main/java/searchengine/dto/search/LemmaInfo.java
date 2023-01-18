@@ -1,4 +1,4 @@
-package searchengine.services;
+package searchengine.dto.search;
 
 import lombok.Data;
 import searchengine.model.Lemma;
