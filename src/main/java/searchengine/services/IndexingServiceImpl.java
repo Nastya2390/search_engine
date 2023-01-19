@@ -1,8 +1,5 @@
 package searchengine.services;
 
-import searchengine.exceptions.BadRequestException;
-import searchengine.exceptions.NotFoundException;
-import searchengine.exceptions.ServerErrorException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
@@ -13,6 +10,9 @@ import searchengine.config.DOMConfiguration;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.dto.indexing.IndexingResponse;
+import searchengine.exceptions.BadRequestException;
+import searchengine.exceptions.NotFoundException;
+import searchengine.exceptions.ServerErrorException;
 import searchengine.model.Index;
 import searchengine.model.IndexingStatus;
 import searchengine.model.Lemma;
@@ -25,7 +25,6 @@ import searchengine.utils.LemmasFinder;
 import searchengine.utils.Node;
 import searchengine.utils.SiteMapConstructor;
 
-import javax.persistence.NonUniqueResultException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -81,6 +80,7 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     private List<searchengine.model.Site> fillSitesInfo(List<Site> sitesList) {
+        long start = System.currentTimeMillis();
         List<searchengine.model.Site> siteModelList = new ArrayList<>();
         for (Site siteData : sitesList) {
             searchengine.model.Site siteModel = new searchengine.model.Site();
@@ -92,6 +92,7 @@ public class IndexingServiceImpl implements IndexingService {
             siteRepository.save(siteModel);
             siteModelList.add(siteModel);
         }
+        log.debug("fillSitesInfo - " + (System.currentTimeMillis() - start) + " ms");
         return siteModelList;
     }
 
@@ -100,32 +101,37 @@ public class IndexingServiceImpl implements IndexingService {
                 .replace("http://www.", "http://");
     }
 
-    void deleteSitesRelatedInformation(List<String> siteNameList) throws NonUniqueResultException {
+    void deleteSitesRelatedInformation(List<String> siteNameList) {
+        long start = System.currentTimeMillis();
         List<searchengine.model.Site> siteList = new ArrayList<>();
         for (String siteName : siteNameList) {
             Optional<searchengine.model.Site> siteOpt = siteRepository.getSiteByName(siteName);
-            if (!siteOpt.isPresent()) return;
+            if (!siteOpt.isPresent()) continue;
             searchengine.model.Site site = siteOpt.get();
             siteList.add(site);
             deleteAllSitePages(site);
             Optional<List<Lemma>> lemmaListOpt = lemmaRepository.getLemmaBySite(site);
-            if (!lemmaListOpt.isPresent() || lemmaListOpt.get().isEmpty()) return;
+            if (!lemmaListOpt.isPresent() || lemmaListOpt.get().isEmpty()) continue;
             lemmaRepository.deleteAll(lemmaListOpt.get());
         }
         siteRepository.deleteAll(siteList);
+        log.debug("deleteSitesRelatedInformation - " + (System.currentTimeMillis() - start) + " ms");
     }
 
     void deleteAllSitePages(searchengine.model.Site site) {
+        long start = System.currentTimeMillis();
         List<Page> pages = pageRepository.getPageBySiteId(site.getId());
         for (Page page : pages) {
             Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageId(page.getId());
-            if (!indexListOpt.isPresent() || indexListOpt.get().isEmpty()) return;
+            if (!indexListOpt.isPresent() || indexListOpt.get().isEmpty()) continue;
             indexRepository.deleteAll(indexListOpt.get());
         }
         pageRepository.deleteAll(pages);
+        log.debug("deleteAllSitePages - " + (System.currentTimeMillis() - start) + " ms");
     }
 
     void fillSitePagesInfo(List<searchengine.model.Site> siteList) {
+        long start = System.currentTimeMillis();
         List<Node> rootNodes = new ArrayList<>();
         for (searchengine.model.Site site : siteList) {
             Document doc = domConfiguration.getDocument(site.getUrl());
@@ -141,6 +147,7 @@ public class IndexingServiceImpl implements IndexingService {
         pool = new ForkJoinPool();
         pool.invoke(new SiteMapConstructor(rootNodes, pageRepository, siteRepository, this));
         changeSitesStatusToIndexed(siteList);
+        log.debug("fillSitePagesInfo - " + (System.currentTimeMillis() - start) + " ms");
     }
 
     private void changeSitesStatusToIndexed(List<searchengine.model.Site> siteList) {
@@ -172,6 +179,7 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     private void setFailedIndexingStatusForSites() {
+        long start = System.currentTimeMillis();
         Optional<List<searchengine.model.Site>> siteListOpt = siteRepository.getSiteByStatus(IndexingStatus.INDEXING);
         if (!siteListOpt.isPresent() || siteListOpt.get().isEmpty())
             throw new BadRequestException(HttpStatus.BAD_REQUEST, IndexingIsNotRun.getValue());
@@ -182,10 +190,12 @@ public class IndexingServiceImpl implements IndexingService {
             site.setLastError(IndexingIsStoppedByUser.getValue());
         }
         siteRepository.saveAll(siteList);
+        log.debug("setFailedIndexingStatusForSites - " + (System.currentTimeMillis() - start) + " ms");
     }
 
     @Override
     public IndexingResponse indexPage(String url) {
+        long start = System.currentTimeMillis();
         final String urlWithoutWWW = getUrlWithoutWWW(url);
         List<Site> sitesList = sites.getSites().stream()
                 .filter(x -> urlWithoutWWW.startsWith(getUrlWithoutWWW(x.getUrl()))).collect(Collectors.toList());
@@ -210,10 +220,12 @@ public class IndexingServiceImpl implements IndexingService {
         } else {
             addNewPageToDB(site, pagePath);
         }
+        System.out.println("indexPage - " + (System.currentTimeMillis() - start) + " ms");
         return new IndexingResponse(true);
     }
 
     private void addNewPageToDB(searchengine.model.Site site, String pagePath) {
+        long start = System.currentTimeMillis();
         String urlAndPath = site.getUrl() + pagePath;
         Document doc = domConfiguration.getDocument(urlAndPath);
         if (doc != null) {
@@ -221,9 +233,11 @@ public class IndexingServiceImpl implements IndexingService {
             pageRepository.save(page);
             savePageLemmasToDB(page);
         }
+        log.debug("addNewPageToDB - " + (System.currentTimeMillis() - start) + " ms");
     }
 
     public void savePageLemmasToDB(Page page) {
+        long start = System.currentTimeMillis();
         if (!isPageCodeValid(page.getCode())) return;
         deletePreviousPageIndexingInfo(page);
         searchengine.model.Site site = page.getSite();
@@ -238,6 +252,7 @@ public class IndexingServiceImpl implements IndexingService {
             indexList.add(index);
         }
         indexRepository.saveAll(indexList);
+        log.debug("savePageLemmasToDB - " + (System.currentTimeMillis() - start) + " ms");
     }
 
     private boolean isPageCodeValid(int code) {
@@ -246,6 +261,7 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Transactional
     public Lemma fillLemmaInfo(searchengine.model.Site site, String word) {
+        long start = System.currentTimeMillis();
         Lemma lemma;
         Optional<List<Lemma>> lemmasOpt = lemmaRepository.getLemmaBySiteAndLemma(site, word);
         if (lemmasOpt.isPresent() && lemmasOpt.get().size() > 0) {
@@ -259,10 +275,12 @@ public class IndexingServiceImpl implements IndexingService {
             lemma.setSite(site);
         }
         lemmaRepository.save(lemma);
+        log.debug("fillLemmaInfo - " + (System.currentTimeMillis() - start) + " ms");
         return lemma;
     }
 
     private void deletePreviousPageIndexingInfo(Page page) {
+        long start = System.currentTimeMillis();
         Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageId(page.getId());
         if (!indexListOpt.isPresent()) return;
         List<Index> indexList = indexListOpt.get();
@@ -276,6 +294,7 @@ public class IndexingServiceImpl implements IndexingService {
         }
         indexRepository.deleteAll(indexList);
         lemmaRepository.deleteAll(lemmasToDelete);
+        log.debug("deletePreviousPageIndexingInfo - " + (System.currentTimeMillis() - start) + " ms");
     }
 
 }
