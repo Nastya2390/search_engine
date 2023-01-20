@@ -43,6 +43,7 @@ public class Page {
         Page page = new Page();
         page.setSite(site);
         page.setPath(path);
+        //todo проверять код страница прежде чем записывать контент и заголовок
         page.setContent(doc.text());
         page.setTitle(doc.title());
         page.setCode(doc.connection().response().statusCode());

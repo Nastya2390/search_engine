@@ -62,6 +62,7 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public IndexingResponse startIndexing() {
+        long start = System.currentTimeMillis();
         SiteMapConstructor.isInterrupted = false;
         List<Site> sitesList = sites.getSites();
         if (sitesList.isEmpty())
@@ -71,6 +72,7 @@ public class IndexingServiceImpl implements IndexingService {
         }
         deleteSitesRelatedInformation(sitesList.stream().map(Site::getName).collect(Collectors.toList()));
         fillSitePagesInfo(fillSitesInfo(sitesList));
+        log.debug("startIndexing - " + (System.currentTimeMillis() - start) + " ms");
         return new IndexingResponse(true);
     }
 
@@ -274,9 +276,16 @@ public class IndexingServiceImpl implements IndexingService {
             lemma.setFrequency(1);
             lemma.setSite(site);
         }
-        lemmaRepository.save(lemma);
-        log.debug("fillLemmaInfo - " + (System.currentTimeMillis() - start) + " ms");
+        log.debug("createLemmaInfo - " + (System.currentTimeMillis() - start) + " ms");
+        saveLemmaToBD(lemma);
         return lemma;
+    }
+
+    @Transactional
+    public void saveLemmaToBD(Lemma lemma) {
+        long start = System.currentTimeMillis();
+        lemmaRepository.save(lemma);
+        log.debug("saveLemmaToBD - " + (System.currentTimeMillis() - start) + " ms");
     }
 
     private void deletePreviousPageIndexingInfo(Page page) {
