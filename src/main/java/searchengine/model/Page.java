@@ -1,7 +1,9 @@
 package searchengine.model;
 
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
+import org.springframework.http.HttpStatus;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -14,6 +16,7 @@ import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
 import javax.persistence.Table;
 
+@Slf4j
 @Data
 @Entity
 @Table(indexes = @Index(name = "path_index", columnList = "path"))
@@ -35,7 +38,7 @@ public class Page {
     @Column(nullable = false, unique = false, columnDefinition = "VARCHAR(255)")
     private String title;
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "site_id", nullable = false)
     private Site site;
 
@@ -43,11 +46,21 @@ public class Page {
         Page page = new Page();
         page.setSite(site);
         page.setPath(path);
-        //todo проверять код страница прежде чем записывать контент и заголовок
-        page.setContent(doc.text());
-        page.setTitle(doc.title());
-        page.setCode(doc.connection().response().statusCode());
+        if (doc == null || !isPageCodeValid(doc.connection().response().statusCode())) {
+            log.debug("Проблема с найденной страницей - " + site.getUrl() + path);
+            page.setContent("");
+            page.setTitle("");
+            page.setCode(doc == null ? HttpStatus.INTERNAL_SERVER_ERROR.value() : doc.connection().response().statusCode());
+        } else {
+            page.setContent(doc.text());
+            page.setTitle(doc.title());
+            page.setCode(doc.connection().response().statusCode());
+        }
         return page;
+    }
+
+    public static boolean isPageCodeValid(int code) {
+        return !String.valueOf(code).substring(0, 1).matches("[4,5]");
     }
 
     @Override

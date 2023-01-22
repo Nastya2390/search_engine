@@ -20,14 +20,30 @@
             <Pattern>%d %p [%t] %C: %msg%n%throwable</Pattern>
         </layout>
     </appender>
-
-    <root level="INFO">
-        <appender-ref ref="File"/>
-        <appender-ref ref="Console"/>
-    </root>
+    <appender name="SevereFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/app-severe-logback.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <Pattern>%d %p [%t] %C: %msg%n%throwable</Pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/archived/app-severe-%d{yyyy-MM-dd}.%i-logback.log</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>10MB</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+        </rollingPolicy>
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <Pattern>%d %p [%t] %C: %msg%n%throwable</Pattern>
+        </layout>
+    </appender>
 
     <logger name="searchengine.services" level="DEBUG">
         <appender-ref ref="File"/>
-        <appender-ref ref="Console"/>
+    </logger>
+
+    <logger name="searchengine.services" level="WARM">
+        <appender-ref ref="SevereFile"/>
     </logger>
 </configuration>

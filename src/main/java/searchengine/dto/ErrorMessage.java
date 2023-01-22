@@ -11,6 +11,7 @@ public enum ErrorMessage {
     NoSitesDataInConfigFile("В конфигурационном файле остутствуют url сайтов для индексации"),
     NoConnectionToSite("Отсутствует соединение с сайтом"),
     IndexingIsInProcess("Индексация уже запущена. Перед запуском переиндексации нужно остановить текущий запуск индексации"),
+    SavingLemmaToDataBaseError("Ошибка при сохранении леммы в базу данных"),
 
     IndexingIsNotRun("Индексация не запущена");
 

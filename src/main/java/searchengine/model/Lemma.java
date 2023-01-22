@@ -4,14 +4,18 @@ import lombok.Data;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
+import javax.persistence.FetchType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.Index;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
+import javax.persistence.Table;
 
 @Data
 @Entity
+@Table(indexes = @Index(name = "lemma_index", columnList = "lemma"))
 public class Lemma {
 
     @Id
@@ -24,7 +28,7 @@ public class Lemma {
     @Column(nullable = false)
     private int frequency;
 
-    @ManyToOne(optional = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "site_id", nullable = false)
     private Site site;
 

@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.DOMConfiguration;
 import searchengine.config.Site;
@@ -44,6 +45,7 @@ import static searchengine.dto.ErrorMessage.InterruptedExceptionOccuredOnStopInd
 import static searchengine.dto.ErrorMessage.NoConnectionToSite;
 import static searchengine.dto.ErrorMessage.NoSitesDataInConfigFile;
 import static searchengine.dto.ErrorMessage.PageIsOutOfConfigFile;
+import static searchengine.dto.ErrorMessage.SavingLemmaToDataBaseError;
 import static searchengine.dto.ErrorMessage.SiteIsSeveralTimesUsedInConfig;
 
 @Slf4j
@@ -240,13 +242,16 @@ public class IndexingServiceImpl implements IndexingService {
 
     public void savePageLemmasToDB(Page page) {
         long start = System.currentTimeMillis();
-        if (!isPageCodeValid(page.getCode())) return;
+        if (!Page.isPageCodeValid(page.getCode())) return;
         deletePreviousPageIndexingInfo(page);
         searchengine.model.Site site = page.getSite();
         Map<String, Integer> lemmas = lemmasFinder.getTextRusEngLemmas(page.getContent());
         List<Index> indexList = new ArrayList<>();
+        Lemma lemma;
         for (String key : lemmas.keySet()) {
-            Lemma lemma = fillLemmaInfo(site, key);
+            do {
+                lemma = fillLemmaInfo(site, key);
+            } while (lemma == null);
             Index index = new Index();
             index.setPage(page);
             index.setLemma(lemma);
@@ -257,35 +262,29 @@ public class IndexingServiceImpl implements IndexingService {
         log.debug("savePageLemmasToDB - " + (System.currentTimeMillis() - start) + " ms");
     }
 
-    private boolean isPageCodeValid(int code) {
-        return !String.valueOf(code).substring(0, 1).matches("[4,5]");
-    }
-
-    @Transactional
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
     public Lemma fillLemmaInfo(searchengine.model.Site site, String word) {
-        long start = System.currentTimeMillis();
-        Lemma lemma;
-        Optional<List<Lemma>> lemmasOpt = lemmaRepository.getLemmaBySiteAndLemma(site, word);
-        if (lemmasOpt.isPresent() && lemmasOpt.get().size() > 0) {
-            // todo assert на число лемм найденных
-            lemma = lemmasOpt.get().iterator().next();
-            lemma.setFrequency(lemma.getFrequency() + 1);
-        } else {
-            lemma = new Lemma();
-            lemma.setLemma(word);
-            lemma.setFrequency(1);
-            lemma.setSite(site);
+        try {
+            long start = System.currentTimeMillis();
+            Lemma lemma;
+            Optional<List<Lemma>> lemmasOpt = lemmaRepository.getLemmaByLemmaAndSite(word, site);
+            if (lemmasOpt.isPresent() && lemmasOpt.get().size() > 0) {
+                // todo assert на число лемм найденных
+                lemma = lemmasOpt.get().iterator().next();
+                lemma.setFrequency(lemma.getFrequency() + 1);
+            } else {
+                lemma = new Lemma();
+                lemma.setLemma(word);
+                lemma.setFrequency(1);
+                lemma.setSite(site);
+            }
+            lemmaRepository.save(lemma);
+            log.debug("fillLemmaInfo - " + (System.currentTimeMillis() - start) + " ms");
+            return lemma;
+        } catch (Exception e) {
+            log.warn(SavingLemmaToDataBaseError.getValue() + " - " + word + " - " + site, e);
+            return null;
         }
-        log.debug("createLemmaInfo - " + (System.currentTimeMillis() - start) + " ms");
-        saveLemmaToBD(lemma);
-        return lemma;
-    }
-
-    @Transactional
-    public void saveLemmaToBD(Lemma lemma) {
-        long start = System.currentTimeMillis();
-        lemmaRepository.save(lemma);
-        log.debug("saveLemmaToBD - " + (System.currentTimeMillis() - start) + " ms");
     }
 
     private void deletePreviousPageIndexingInfo(Page page) {

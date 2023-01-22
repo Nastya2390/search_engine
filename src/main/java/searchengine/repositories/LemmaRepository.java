@@ -11,14 +11,10 @@ import java.util.Optional;
 @Repository
 public interface LemmaRepository extends JpaRepository<Lemma, Integer> {
 
-    Optional<Lemma> getLemmaById(Integer lemmaId);
-
-    Optional<List<Lemma>> getLemmaBySiteAndLemma(Site site, String lemma);
+    Optional<List<Lemma>> getLemmaByLemmaAndSite(String lemma, Site site);
 
     Optional<List<Lemma>> getLemmaBySite(Site site);
 
     Optional<List<Lemma>> getLemmaByLemma(String lemma);
-
-    List<Integer> getIdByLemma(String lemma);
 
 }

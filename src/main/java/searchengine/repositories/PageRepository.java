@@ -15,6 +15,4 @@ public interface PageRepository extends JpaRepository<Page, Integer> {
 
     Optional<Page> getPageByPathAndSite(String path, Site site);
 
-    Page getPageById(int id);
-
 }
