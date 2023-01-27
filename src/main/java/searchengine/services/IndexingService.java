@@ -4,7 +4,7 @@ import searchengine.dto.indexing.IndexingResponse;
 import searchengine.model.Page;
 
 public interface IndexingService {
-    IndexingResponse startIndexing();
+    void startIndexing();
 
     IndexingResponse stopIndexing();
 

@@ -37,7 +37,7 @@ public class SearchServiceImpl implements SearchService {
     private final LemmasFinder lemmasFinder;
     private final int OFFSET = 50;
     private final int SNIPPET_LENGTH = 400;
-    private final double LEMMA_FREQUENCY_COEFFICIENT = 0.7;
+    private final double LEMMA_FREQUENCY_COEFFICIENT = 0.9;
 
     @Override
     public SearchResponse search(SearchRequestParams params) {
@@ -65,22 +65,26 @@ public class SearchServiceImpl implements SearchService {
     }
 
     private Map<String, LemmaInfo> getLemmaFrequenciesInfo(SearchRequestParams params) {
+        String siteName = params.getSite();
         Map<String, LemmaInfo> searchInfo = new HashMap<>();
         Map<String, Integer> requestLemmas = lemmasFinder.getTextRusEngLemmas(params.getQuery());
         for (String lemma : requestLemmas.keySet()) {
             Optional<List<Lemma>> lemmaListOpt = lemmaRepository.getLemmaByLemma(lemma);
-            if (!lemmaListOpt.isPresent() || lemmaListOpt.get().isEmpty())
-                return Collections.emptyMap();
+            if (!lemmaListOpt.isPresent() || lemmaListOpt.get().isEmpty()) continue;
             List<Lemma> lemmaList = lemmaListOpt.get();
-            if (!params.getSite().equals("all")) {
-                lemmaList = lemmaList.stream()
-                        .filter(x -> x.getSite().getUrl().equals(params.getSite())).collect(Collectors.toList());
-                if (lemmaList.isEmpty()) return Collections.emptyMap();
+            if (!siteName.equals("all")) {
+                lemmaList = getSpecifiedSiteLemmas(lemmaList, siteName);
             }
+            if (lemmaList.isEmpty()) continue;
             int lemmaFrequency = lemmaList.stream().map(Lemma::getFrequency).reduce(Integer::sum).get();
             searchInfo.put(lemma, new LemmaInfo(lemmaList, lemmaFrequency));
         }
         return searchInfo;
+    }
+
+    private List<Lemma> getSpecifiedSiteLemmas(List<Lemma> lemmaList, String site) {
+        return lemmaList.stream()
+                .filter(x -> x.getSite().getUrl().equals(site)).collect(Collectors.toList());
     }
 
     private Map<String, LemmaInfo> excludeFrequentlyUsedLemma(Map<String, LemmaInfo> lemmas, String site) {

@@ -18,6 +18,7 @@ public class SiteMapConstructor extends RecursiveAction {
     private final SiteRepository siteRepository;
     private final IndexingService indexingService;
     public volatile static Boolean isInterrupted = false;
+    public volatile static Boolean indexingRunning = false;
 
     public SiteMapConstructor(List<Node> rootNodes, PageRepository pageRepository,
                               SiteRepository siteRepository,

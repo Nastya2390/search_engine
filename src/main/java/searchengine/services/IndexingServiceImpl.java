@@ -4,9 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Transactional;
 import searchengine.config.DOMConfiguration;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
@@ -45,7 +44,6 @@ import static searchengine.dto.ErrorMessage.InterruptedExceptionOccuredOnStopInd
 import static searchengine.dto.ErrorMessage.NoConnectionToSite;
 import static searchengine.dto.ErrorMessage.NoSitesDataInConfigFile;
 import static searchengine.dto.ErrorMessage.PageIsOutOfConfigFile;
-import static searchengine.dto.ErrorMessage.SavingLemmaToDataBaseError;
 import static searchengine.dto.ErrorMessage.SiteIsSeveralTimesUsedInConfig;
 
 @Slf4j
@@ -62,10 +60,13 @@ public class IndexingServiceImpl implements IndexingService {
     private final LemmasFinder lemmasFinder;
     private ForkJoinPool pool;
 
+    @Async
     @Override
-    public IndexingResponse startIndexing() {
+    public void startIndexing() {
         long start = System.currentTimeMillis();
         SiteMapConstructor.isInterrupted = false;
+        pool = new ForkJoinPool();
+        SiteMapConstructor.indexingRunning = true;
         List<Site> sitesList = sites.getSites();
         if (sitesList.isEmpty())
             throw new NotFoundException(HttpStatus.NOT_FOUND, NoSitesDataInConfigFile.getValue());
@@ -75,12 +76,11 @@ public class IndexingServiceImpl implements IndexingService {
         deleteSitesRelatedInformation(sitesList.stream().map(Site::getName).collect(Collectors.toList()));
         fillSitePagesInfo(fillSitesInfo(sitesList));
         log.debug("startIndexing - " + (System.currentTimeMillis() - start) + " ms");
-        return new IndexingResponse(true);
     }
 
     private boolean isIndexingInProcess() {
         Optional<List<searchengine.model.Site>> siteListOpt = siteRepository.getSiteByStatus(IndexingStatus.INDEXING);
-        return pool != null && siteListOpt.isPresent() && siteListOpt.get().size() > 0;
+        return SiteMapConstructor.indexingRunning && siteListOpt.isPresent() && siteListOpt.get().size() > 0;
     }
 
     private List<searchengine.model.Site> fillSitesInfo(List<Site> sitesList) {
@@ -148,7 +148,6 @@ public class IndexingServiceImpl implements IndexingService {
             Page rootPage = Page.constructPage("/", site, doc);
             rootNodes.add(new Node(site.getUrl(), rootPage, domConfiguration));
         }
-        pool = new ForkJoinPool();
         pool.invoke(new SiteMapConstructor(rootNodes, pageRepository, siteRepository, this));
         changeSitesStatusToIndexed(siteList);
         log.debug("fillSitePagesInfo - " + (System.currentTimeMillis() - start) + " ms");
@@ -167,16 +166,19 @@ public class IndexingServiceImpl implements IndexingService {
     @Override
     public IndexingResponse stopIndexing() {
         try {
-            if (pool == null)
+            log.debug("stopIndexing started");
+            if (!SiteMapConstructor.indexingRunning)
                 throw new BadRequestException(HttpStatus.BAD_REQUEST, IndexingIsNotRun.getValue());
             pool.shutdownNow();
-            if (pool.awaitTermination(1, TimeUnit.MINUTES)) {
+            if (pool.awaitTermination(5, TimeUnit.MINUTES)) {
                 setFailedIndexingStatusForSites();
             } else {
                 throw new ServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, IndexingIsNotStopped.getValue());
             }
+            SiteMapConstructor.indexingRunning = false;
+            log.debug("stopIndexing finished successfully");
             return new IndexingResponse(true);
-        } catch (InterruptedException e) {
+        } catch (Exception e) {
             log.error(e.getMessage(), e);
             throw new ServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, InterruptedExceptionOccuredOnStopIndexing.getValue());
         }
@@ -249,9 +251,7 @@ public class IndexingServiceImpl implements IndexingService {
         List<Index> indexList = new ArrayList<>();
         Lemma lemma;
         for (String key : lemmas.keySet()) {
-            do {
-                lemma = fillLemmaInfo(site, key);
-            } while (lemma == null);
+            lemma = fillLemmaInfo(site, key);
             Index index = new Index();
             index.setPage(page);
             index.setLemma(lemma);
@@ -262,29 +262,23 @@ public class IndexingServiceImpl implements IndexingService {
         log.debug("savePageLemmasToDB - " + (System.currentTimeMillis() - start) + " ms");
     }
 
-    @Transactional(isolation = Isolation.REPEATABLE_READ)
-    public Lemma fillLemmaInfo(searchengine.model.Site site, String word) {
-        try {
-            long start = System.currentTimeMillis();
-            Lemma lemma;
-            Optional<List<Lemma>> lemmasOpt = lemmaRepository.getLemmaByLemmaAndSite(word, site);
-            if (lemmasOpt.isPresent() && lemmasOpt.get().size() > 0) {
-                // todo assert на число лемм найденных
-                lemma = lemmasOpt.get().iterator().next();
-                lemma.setFrequency(lemma.getFrequency() + 1);
-            } else {
-                lemma = new Lemma();
-                lemma.setLemma(word);
-                lemma.setFrequency(1);
-                lemma.setSite(site);
-            }
-            lemmaRepository.save(lemma);
-            log.debug("fillLemmaInfo - " + (System.currentTimeMillis() - start) + " ms");
-            return lemma;
-        } catch (Exception e) {
-            log.warn(SavingLemmaToDataBaseError.getValue() + " - " + word + " - " + site, e);
-            return null;
+    public synchronized Lemma fillLemmaInfo(searchengine.model.Site site, String word) {
+        long start = System.currentTimeMillis();
+        Lemma lemma;
+        Optional<List<Lemma>> lemmasOpt = lemmaRepository.getLemmaByLemmaAndSite(word, site);
+        if (lemmasOpt.isPresent() && lemmasOpt.get().size() > 0) {
+            // todo assert на число лемм найденных
+            lemma = lemmasOpt.get().iterator().next();
+            lemma.setFrequency(lemma.getFrequency() + 1);
+        } else {
+            lemma = new Lemma();
+            lemma.setLemma(word);
+            lemma.setFrequency(1);
+            lemma.setSite(site);
         }
+        lemmaRepository.save(lemma);
+        log.debug("fillLemmaInfo - " + (System.currentTimeMillis() - start) + " ms");
+        return lemma;
     }
 
     private void deletePreviousPageIndexingInfo(Page page) {
