@@ -41,7 +41,7 @@ public class LemmasFinder {
                 continue;
             }
             String normalWord = baseForms.get(0);
-            if (normalWord.length() < 2) {
+            if (normalWord.length() < 3) {
                 continue;
             }
             if (lemmas.containsKey(normalWord)) {
@@ -51,6 +51,17 @@ public class LemmasFinder {
             }
         }
         return lemmas;
+    }
+
+    public String deleteHtmlTags(String text) {
+        return text.replaceAll("\\n", " ")
+                .replaceAll("<style[^<]+</style>", " ")
+                .replaceAll("<script[^<]+</script>", " ")
+                .replaceAll("<noscript[^<]+</noscript>", " ")
+                .replaceAll("<textarea[^<]+</textarea>", " ")
+                .replaceAll("<!--[.]+-->", " ")
+                .replaceAll("&nbsp;", " ")
+                .replaceAll("<[^>]+>", " ");
     }
 
     private boolean isEmptyArray(String[] words) {

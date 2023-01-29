@@ -1,6 +1,8 @@
 package searchengine.model;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
@@ -13,7 +15,9 @@ import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
 import javax.persistence.Table;
 
-@Data
+@Getter
+@Setter
+@RequiredArgsConstructor
 @Entity
 @Table(indexes = @Index(name = "lemma_index", columnList = "lemma"))
 public class Lemma {
@@ -40,4 +44,5 @@ public class Lemma {
                 ", frequency=" + frequency +
                 '}';
     }
+
 }

@@ -41,6 +41,7 @@ import static searchengine.dto.ErrorMessage.IndexingIsNotRun;
 import static searchengine.dto.ErrorMessage.IndexingIsNotStopped;
 import static searchengine.dto.ErrorMessage.IndexingIsStoppedByUser;
 import static searchengine.dto.ErrorMessage.InterruptedExceptionOccuredOnStopIndexing;
+import static searchengine.dto.ErrorMessage.LemmasDoublesFoundAtOneSite;
 import static searchengine.dto.ErrorMessage.NoConnectionToSite;
 import static searchengine.dto.ErrorMessage.NoSitesDataInConfigFile;
 import static searchengine.dto.ErrorMessage.PageIsOutOfConfigFile;
@@ -66,16 +67,25 @@ public class IndexingServiceImpl implements IndexingService {
         long start = System.currentTimeMillis();
         SiteMapConstructor.isInterrupted = false;
         pool = new ForkJoinPool();
-        SiteMapConstructor.indexingRunning = true;
         List<Site> sitesList = sites.getSites();
+        deleteBackslashAtTheEndOfSiteUrl(sitesList);
         if (sitesList.isEmpty())
             throw new NotFoundException(HttpStatus.NOT_FOUND, NoSitesDataInConfigFile.getValue());
         if (isIndexingInProcess()) {
             throw new ServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, IndexingIsInProcess.getValue());
         }
+        SiteMapConstructor.indexingRunning = true;
         deleteSitesRelatedInformation(sitesList.stream().map(Site::getName).collect(Collectors.toList()));
         fillSitePagesInfo(fillSitesInfo(sitesList));
         log.debug("startIndexing - " + (System.currentTimeMillis() - start) + " ms");
+    }
+
+    private void deleteBackslashAtTheEndOfSiteUrl(List<Site> sitesList) {
+        for (Site site : sitesList) {
+            if (site.getUrl().endsWith("/")) {
+                site.setUrl(site.getUrl().substring(0, site.getUrl().length() - 1));
+            }
+        }
     }
 
     private boolean isIndexingInProcess() {
@@ -149,18 +159,7 @@ public class IndexingServiceImpl implements IndexingService {
             rootNodes.add(new Node(site.getUrl(), rootPage, domConfiguration));
         }
         pool.invoke(new SiteMapConstructor(rootNodes, pageRepository, siteRepository, this));
-        changeSitesStatusToIndexed(siteList);
         log.debug("fillSitePagesInfo - " + (System.currentTimeMillis() - start) + " ms");
-    }
-
-    private void changeSitesStatusToIndexed(List<searchengine.model.Site> siteList) {
-        // todo исключить сайты с ошибкой индексации
-        if (!SiteMapConstructor.isInterrupted) {
-            for (searchengine.model.Site site : siteList) {
-                site.setStatus(IndexingStatus.INDEXED);
-                siteRepository.save(site);
-            }
-        }
     }
 
     @Override
@@ -169,6 +168,7 @@ public class IndexingServiceImpl implements IndexingService {
             log.debug("stopIndexing started");
             if (!SiteMapConstructor.indexingRunning)
                 throw new BadRequestException(HttpStatus.BAD_REQUEST, IndexingIsNotRun.getValue());
+            SiteMapConstructor.isInterrupted = true;
             pool.shutdownNow();
             if (pool.awaitTermination(5, TimeUnit.MINUTES)) {
                 setFailedIndexingStatusForSites();
@@ -205,6 +205,7 @@ public class IndexingServiceImpl implements IndexingService {
         final String urlWithoutWWW = getUrlWithoutWWW(url);
         List<Site> sitesList = sites.getSites().stream()
                 .filter(x -> urlWithoutWWW.startsWith(getUrlWithoutWWW(x.getUrl()))).collect(Collectors.toList());
+        deleteBackslashAtTheEndOfSiteUrl(sitesList);
         if (sitesList.isEmpty()) {
             throw new BadRequestException(HttpStatus.BAD_REQUEST, PageIsOutOfConfigFile.getValue());
         } else if (sitesList.size() > 1) {
@@ -219,7 +220,7 @@ public class IndexingServiceImpl implements IndexingService {
         } else {
             site = siteOpt.get();
         }
-        String pagePath = url.replaceFirst(siteUrl, "");
+        String pagePath = urlWithoutWWW.replaceFirst(siteUrl, "");
         Optional<Page> pageOpt = pageRepository.getPageByPathAndSite(pagePath, site);
         if (pageOpt.isPresent()) {
             savePageLemmasToDB(pageOpt.get());
@@ -244,10 +245,11 @@ public class IndexingServiceImpl implements IndexingService {
 
     public void savePageLemmasToDB(Page page) {
         long start = System.currentTimeMillis();
-        if (!Page.isPageCodeValid(page.getCode())) return;
+        if (Page.pageCodeNotValid(page.getCode())) return;
         deletePreviousPageIndexingInfo(page);
         searchengine.model.Site site = page.getSite();
-        Map<String, Integer> lemmas = lemmasFinder.getTextRusEngLemmas(page.getContent());
+        String textWithoutTags = lemmasFinder.deleteHtmlTags(page.getContent());
+        Map<String, Integer> lemmas = lemmasFinder.getTextRusEngLemmas(textWithoutTags);
         List<Index> indexList = new ArrayList<>();
         Lemma lemma;
         for (String key : lemmas.keySet()) {
@@ -259,7 +261,7 @@ public class IndexingServiceImpl implements IndexingService {
             indexList.add(index);
         }
         indexRepository.saveAll(indexList);
-        log.debug("savePageLemmasToDB - " + (System.currentTimeMillis() - start) + " ms");
+        log.debug("savePageLemmasToDB - " + (System.currentTimeMillis() - start) + " ms - ");
     }
 
     public synchronized Lemma fillLemmaInfo(searchengine.model.Site site, String word) {
@@ -267,9 +269,12 @@ public class IndexingServiceImpl implements IndexingService {
         Lemma lemma;
         Optional<List<Lemma>> lemmasOpt = lemmaRepository.getLemmaByLemmaAndSite(word, site);
         if (lemmasOpt.isPresent() && lemmasOpt.get().size() > 0) {
-            // todo assert на число лемм найденных
-            lemma = lemmasOpt.get().iterator().next();
-            lemma.setFrequency(lemma.getFrequency() + 1);
+            if (lemmasOpt.get().size() == 1) {
+                lemma = lemmasOpt.get().iterator().next();
+                lemma.setFrequency(lemma.getFrequency() + 1);
+            } else {
+                throw new ServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, LemmasDoublesFoundAtOneSite.getValue());
+            }
         } else {
             lemma = new Lemma();
             lemma.setLemma(word);

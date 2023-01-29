@@ -1,6 +1,8 @@
 package searchengine.model;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 
 import javax.persistence.CascadeType;
 import javax.persistence.Column;
@@ -15,7 +17,9 @@ import javax.persistence.OneToMany;
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Data
+@Getter
+@Setter
+@RequiredArgsConstructor
 @Entity
 public class Site {
 
@@ -23,14 +27,14 @@ public class Site {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    @Column(nullable = false, unique = false)
+    @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private IndexingStatus status;
 
-    @Column(nullable = false, unique = false)
+    @Column(nullable = false)
     private LocalDateTime statusTime;
 
-    @Column(nullable = true, unique = false, columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT")
     private String lastError;
 
     @Column(nullable = false, unique = true, columnDefinition = "VARCHAR(255)")
@@ -51,7 +55,7 @@ public class Site {
                 ", lastError='" + lastError + '\'' +
                 ", url='" + url + '\'' +
                 ", name='" + name + '\'' +
-                ", pages=" + pages +
                 '}';
     }
+
 }

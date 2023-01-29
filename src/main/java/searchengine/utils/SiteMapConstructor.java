@@ -1,5 +1,6 @@
 package searchengine.utils;
 
+import searchengine.model.IndexingStatus;
 import searchengine.model.Page;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
@@ -56,7 +57,16 @@ public class SiteMapConstructor extends RecursiveAction {
         indexingService.savePageLemmasToDB(page);
         page.getSite().setStatusTime(LocalDateTime.now());
         siteRepository.save(page.getSite());
-        runTasksForChildrenPages(node);
+        if (!page.getPath().endsWith(".html"))
+            runTasksForChildrenPages(node);
+        if (isRootPage(page)) {
+            page.getSite().setStatus(IndexingStatus.INDEXED);
+            siteRepository.save(page.getSite());
+        }
+    }
+
+    private boolean isRootPage(Page page) {
+        return page.getPath().equals("/");
     }
 
     private void runTasksForChildrenPages(Node node) {

@@ -36,12 +36,11 @@ public class Node {
             if (ref.absUrl("href").startsWith(urlAndPath) && !ref.absUrl("href").contains("#")) {
                 String url = ref.absUrl("href");
                 Document childDoc = domConfiguration.getDocument(url);
-                url = url.replace(ref.baseUri(), "/");
+                url = url.replace(this.page.getSite().getUrl(), "");
                 childNodes.add(new Node(this.getSiteUrl(), Page.constructPage(url, this.page.getSite(), childDoc), domConfiguration));
             }
         }
         return childNodes;
-
     }
 
 }

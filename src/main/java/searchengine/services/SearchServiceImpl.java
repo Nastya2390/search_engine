@@ -49,19 +49,19 @@ public class SearchServiceImpl implements SearchService {
         searchInfo = excludeFrequentlyUsedLemma(searchInfo, params.getSite());
         if (searchInfo.isEmpty())
             return new SearchResponse(true, 0, Collections.emptyList());
-
         searchInfo = sortLemmasByFrequency(searchInfo);
-
         List<Page> foundPages = getSearchResultPages(searchInfo);
         if (foundPages.isEmpty())
             return new SearchResponse(true, 0, Collections.emptyList());
-
-        List<Lemma> requestLemmasList = searchInfo.values().stream()
-                .map(LemmaInfo::getLemmaList).flatMap(Collection::stream).collect(Collectors.toList());
+        List<Lemma> requestLemmasList = getRequestLemmasList(searchInfo);
         Map<Page, Double> pagesRelevance = computePagesRelativeRelevance(foundPages, requestLemmasList);
-
         List<SearchData> data = fillResponseDataList(pagesRelevance, requestLemmasList, params);
         return new SearchResponse(true, pagesRelevance.size(), data);
+    }
+
+    private List<Lemma> getRequestLemmasList(Map<String, LemmaInfo> searchInfo) {
+        return searchInfo.values().stream()
+                .map(LemmaInfo::getLemmaList).flatMap(Collection::stream).collect(Collectors.toList());
     }
 
     private Map<String, LemmaInfo> getLemmaFrequenciesInfo(SearchRequestParams params) {
@@ -89,17 +89,18 @@ public class SearchServiceImpl implements SearchService {
 
     private Map<String, LemmaInfo> excludeFrequentlyUsedLemma(Map<String, LemmaInfo> lemmas, String site) {
         List<Site> siteList = siteRepository.findAll();
-        long frequencyLimit;
+        if (siteList.isEmpty()) return Collections.emptyMap();
+        long allSearchPagesCount;
         if (site.equals("all")) {
-            frequencyLimit = siteList.stream().map(x -> x.getPages().size()).reduce(Integer::sum).get();
+            allSearchPagesCount = siteList.stream().map(x -> x.getPages().size()).reduce(Integer::sum).get();
         } else {
             List<Site> filteredSiteList = siteList.stream().filter(x -> x.getUrl().equals(site)).collect(Collectors.toList());
             if (filteredSiteList.isEmpty()) return Collections.emptyMap();
-            frequencyLimit = Math.round(filteredSiteList.iterator().next().getPages().size());
+            allSearchPagesCount = Math.round(filteredSiteList.iterator().next().getPages().size());
         }
         Map<String, LemmaInfo> result = new HashMap<>();
         for (String lemma : lemmas.keySet()) {
-            if (lemmas.get(lemma).getCommonFrequency() < frequencyLimit * LEMMA_FREQUENCY_COEFFICIENT)
+            if (lemmas.get(lemma).getCommonFrequency() < allSearchPagesCount * LEMMA_FREQUENCY_COEFFICIENT)
                 result.put(lemma, lemmas.get(lemma));
         }
         return result;
@@ -117,7 +118,7 @@ public class SearchServiceImpl implements SearchService {
         for (LemmaInfo lemmaInfo : searchInfo.values()) {
             List<Lemma> lemmaList = lemmaInfo.getLemmaList();
             if (hasInitialFill) {
-                markIncorrectPagesInSearchResult(lemmaList, searchResult);
+                markNotSuitablePagesInSearchResult(lemmaList, searchResult);
             } else {
                 initialSearchResultFill(lemmaList, searchResult);
                 hasInitialFill = true;
@@ -129,6 +130,7 @@ public class SearchServiceImpl implements SearchService {
     private void initialSearchResultFill(List<Lemma> lemmaList, Map<Page, Boolean> searchResult) {
         for (Lemma lemma : lemmaList) {
             Optional<List<Index>> indexListOpt = indexRepository.getIndexByLemma(lemma);
+            if (!indexListOpt.isPresent() || indexListOpt.get().size() == 0) return;
             List<Page> pageList = indexListOpt.get().stream().map(Index::getPage).collect(Collectors.toList());
             for (Page page : pageList) {
                 searchResult.put(page, true);
@@ -136,15 +138,23 @@ public class SearchServiceImpl implements SearchService {
         }
     }
 
-    private void markIncorrectPagesInSearchResult(List<Lemma> lemmaList, Map<Page, Boolean> searchResult) {
-        for (Lemma lemma : lemmaList) {
-            for (Page page : searchResult.keySet()) {
-                Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageIdAndLemmaId(page.getId(), lemma.getId());
-                if (!indexListOpt.isPresent() || indexListOpt.get().size() == 0) {
-                    searchResult.put(page, false);
-                }
+    private void markNotSuitablePagesInSearchResult(List<Lemma> lemmaList, Map<Page, Boolean> searchResult) {
+        for (Page page : searchResult.keySet()) {
+            boolean isSuitablePage = isPageSuitableForSearchResult(lemmaList, page);
+            if (!isSuitablePage) {
+                searchResult.put(page, false);
             }
         }
+    }
+
+    private boolean isPageSuitableForSearchResult(List<Lemma> lemmaList, Page page) {
+        for (Lemma lemma : lemmaList) {
+            Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageIdAndLemmaId(page.getId(), lemma.getId());
+            if (indexListOpt.isPresent() && indexListOpt.get().size() > 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private List<Page> excludeIncorrectPagesFromResult(Map<Page, Boolean> searchResult) {
@@ -160,19 +170,25 @@ public class SearchServiceImpl implements SearchService {
     private Map<Page, Double> computePagesRelativeRelevance(List<Page> foundPages, List<Lemma> requestLemmas) {
         Map<Page, Double> pagesRelevance = new LinkedHashMap<>();
         for (Page page : foundPages) {
-            double pageRank = 0;
-            for (Lemma lemma : requestLemmas) {
-                Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageIdAndLemmaId(page.getId(), lemma.getId());
-                if (indexListOpt.isPresent() && indexListOpt.get().size() == 1) {
-                    pageRank += indexListOpt.get().iterator().next().getRank();
-                }
-            }
-            pagesRelevance.put(page, pageRank);
+            double pageRelevance = computePageRelevance(page, requestLemmas);
+            pagesRelevance.put(page, pageRelevance);
         }
-        double maxPageRank = pagesRelevance.values().stream().max(Double::compare).get();
-        pagesRelevance.replaceAll((p, v) -> pagesRelevance.get(p) / maxPageRank);
+        if (pagesRelevance.size() == 0) return Collections.emptyMap();
+        double maxPageRelevance = pagesRelevance.values().stream().max(Double::compare).get();
+        pagesRelevance.replaceAll((page, relevance) -> pagesRelevance.get(page) / maxPageRelevance);
         return pagesRelevance.entrySet().stream().sorted(Collections.reverseOrder(Map.Entry.comparingByValue()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+    }
+
+    private double computePageRelevance(Page page, List<Lemma> requestLemmas) {
+        double pageRelevance = 0;
+        for (Lemma lemma : requestLemmas) {
+            Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageIdAndLemmaId(page.getId(), lemma.getId());
+            if (indexListOpt.isPresent() && indexListOpt.get().size() == 1) {
+                pageRelevance += indexListOpt.get().iterator().next().getRank();
+            }
+        }
+        return pageRelevance;
     }
 
     private List<SearchData> fillResponseDataList(Map<Page, Double> pagesRelevance,
@@ -187,7 +203,7 @@ public class SearchServiceImpl implements SearchService {
                 searchData.setSite(page.getSite().getUrl());
                 searchData.setSiteName(page.getSite().getName());
                 searchData.setUri(page.getPath());
-                searchData.setTitle(boldLemmasInText(page.getTitle(), requestLemmas));
+                searchData.setTitle(getPageTitle(page, requestLemmas));
                 searchData.setSnippet(getPageSnippet(page, requestLemmas));
                 searchData.setRelevance(pagesRelevance.get(page));
                 data.add(searchData);
@@ -198,20 +214,36 @@ public class SearchServiceImpl implements SearchService {
         return data;
     }
 
+    private String getPageTitle(Page page, List<Lemma> requestLemmas) {
+        Pattern pattern = Pattern.compile("<title>.+</title>");
+        Matcher matcher = pattern.matcher(page.getContent());
+        if (matcher.find()) {
+            String title = page.getContent().substring(matcher.start(), matcher.end());
+            title = lemmasFinder.deleteHtmlTags(title);
+            return boldLemmasInText(title, requestLemmas);
+        }
+        return "";
+    }
+
     private String getPageSnippet(Page page, List<Lemma> requestLemmas) {
         StringBuilder snippet = new StringBuilder();
+        String textWithoutTags = lemmasFinder.deleteHtmlTags(page.getContent());
+        String rusEngTextWithoutTags = lemmasFinder.getRusEngText(textWithoutTags);
+        rusEngTextWithoutTags = rusEngTextWithoutTags.replaceAll("\\s+", " ");
         for (Lemma lemma : requestLemmas) {
             Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageIdAndLemmaId(page.getId(), lemma.getId());
-            if (indexListOpt.isPresent() && indexListOpt.get().size() == 1) {
-                String rusEngTextWithoutTags = lemmasFinder.getRusEngText(page.getContent());
-                rusEngTextWithoutTags = rusEngTextWithoutTags.replaceAll("\\s+", " ");
-                int lemmaIndex = rusEngTextWithoutTags.indexOf(lemma.getLemma());
-                if (lemmaIndex == -1)
-                    lemmaIndex = rusEngTextWithoutTags.indexOf(lemma.getLemma().substring(0, lemma.getLemma().length() - 1));
-                snippet.append(constructSnippet(lemmaIndex, rusEngTextWithoutTags)).append("... ");
-            }
+            if (!indexListOpt.isPresent() || indexListOpt.get().size() == 0) continue;
+            int lemmaIndex = rusEngTextWithoutTags.indexOf(lemma.getLemma());
+            if (lemmaIndex == -1)
+                lemmaIndex = getLemmaIndexWithoutLastLemmaLetters(lemma.getLemma(), rusEngTextWithoutTags);
+            if (lemmaIndex == -1) continue;
+            snippet.append(constructSnippet(lemmaIndex, rusEngTextWithoutTags)).append("... ");
         }
         return boldLemmasInText(snippet.toString(), requestLemmas);
+    }
+
+    private int getLemmaIndexWithoutLastLemmaLetters(String word, String text) {
+        return text.indexOf(word.substring(0, word.length() - 1));
     }
 
     private String constructSnippet(int lemmaIndex, String pageTextWithoutTags) {
@@ -247,7 +279,7 @@ public class SearchServiceImpl implements SearchService {
         List<String> uniqueLemmas = requestLemmas.stream()
                 .map(Lemma::getLemma).distinct().collect(Collectors.toList());
         for (String lemma : uniqueLemmas) {
-            Pattern pattern = Pattern.compile(lemma.substring(0, lemma.length() - 1) + "[А-Яа-яa-zA-Z]+[\\s\\p{P}<]{1}",
+            Pattern pattern = Pattern.compile(lemma.substring(0, lemma.length() - 1) + "[А-Яа-яa-zA-Z]+[\\s\\p{P}<]",
                     Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
             Matcher matcher = pattern.matcher(text);
 

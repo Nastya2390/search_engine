@@ -1,8 +1,9 @@
 package searchengine.model;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 
-import javax.persistence.CascadeType;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.FetchType;
@@ -13,7 +14,9 @@ import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
 import javax.persistence.Table;
 
-@Data
+@Getter
+@Setter
+@RequiredArgsConstructor
 @Entity
 @Table(name = "`index`")
 public class Index {
@@ -22,7 +25,7 @@ public class Index {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    @Column(name = "`rank`", nullable = false, unique = false, columnDefinition = "FLOAT")
+    @Column(name = "`rank`", nullable = false, columnDefinition = "FLOAT")
     private double rank;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -38,8 +41,7 @@ public class Index {
         return "Index{" +
                 "id=" + id +
                 ", rank=" + rank +
-                ", page=" + page +
-                ", lemma=" + lemma +
                 '}';
     }
+
 }

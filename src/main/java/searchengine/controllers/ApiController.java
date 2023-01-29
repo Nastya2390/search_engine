@@ -39,7 +39,7 @@ public class ApiController {
 
     @GetMapping("/statistics")
     public ResponseEntity<StatisticsResponse> statistics() {
-        return ResponseEntity.ok(statisticsService.getStatistics());
+        return new ResponseEntity<>(statisticsService.getStatistics(), HttpStatus.OK);
     }
 
     @GetMapping("/startIndexing")
@@ -50,12 +50,12 @@ public class ApiController {
 
     @GetMapping("/stopIndexing")
     public ResponseEntity<IndexingResponse> stopIndexing() {
-        return ResponseEntity.ok(indexingService.stopIndexing());
+        return new ResponseEntity<>(indexingService.stopIndexing(), HttpStatus.OK);
     }
 
     @PostMapping(value = "/indexPage")
     public ResponseEntity<IndexingResponse> indexPage(@RequestParam(value = "url", defaultValue = "") String url) {
-        return ResponseEntity.ok(indexingService.indexPage(url));
+        return new ResponseEntity<>(indexingService.indexPage(url), HttpStatus.OK);
     }
 
     @GetMapping("/search")
