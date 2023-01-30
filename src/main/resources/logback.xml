@@ -43,7 +43,7 @@
         <appender-ref ref="File"/>
     </logger>
 
-    <logger name="searchengine.services" level="WARM">
+    <logger name="searchengine" level="WARN">
         <appender-ref ref="SevereFile"/>
     </logger>
 </configuration>

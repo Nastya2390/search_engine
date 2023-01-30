@@ -1,18 +1,19 @@
 package searchengine.utils;
 
+import lombok.extern.slf4j.Slf4j;
 import searchengine.model.IndexingStatus;
 import searchengine.model.Page;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 import searchengine.services.IndexingService;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.RecursiveAction;
 
+@Slf4j
 public class SiteMapConstructor extends RecursiveAction {
     private final List<Node> rootNodes;
     private final PageRepository pageRepository;
@@ -49,7 +50,7 @@ public class SiteMapConstructor extends RecursiveAction {
         }
     }
 
-    private void performPageIndexing(Node node) {
+    public synchronized void performPageIndexing(Node node) {
         Page page = node.getPage();
         if (pageRepository.getPageByPathAndSite(page.getPath(), page.getSite()).isPresent())
             return;
@@ -57,8 +58,7 @@ public class SiteMapConstructor extends RecursiveAction {
         indexingService.savePageLemmasToDB(page);
         page.getSite().setStatusTime(LocalDateTime.now());
         siteRepository.save(page.getSite());
-        if (!page.getPath().endsWith(".html"))
-            runTasksForChildrenPages(node);
+        runTasksForChildrenPages(node);
         if (isRootPage(page)) {
             page.getSite().setStatus(IndexingStatus.INDEXED);
             siteRepository.save(page.getSite());
@@ -81,8 +81,8 @@ public class SiteMapConstructor extends RecursiveAction {
             for (SiteMapConstructor task : taskList) {
                 task.join();
             }
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
         }
     }
 

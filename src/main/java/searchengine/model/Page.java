@@ -17,6 +17,7 @@ import javax.persistence.Index;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
 import javax.persistence.Table;
+import java.util.Objects;
 
 @Slf4j
 @Getter
@@ -69,6 +70,19 @@ public class Page {
                 ", path='" + path + '\'' +
                 ", code=" + code +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Page page = (Page) o;
+        return id == page.id && code == page.code && Objects.equals(path, page.path) && Objects.equals(site.getUrl(), page.site.getUrl());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, path, code);
     }
 
 }

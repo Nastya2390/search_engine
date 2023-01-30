@@ -7,11 +7,12 @@ import org.jsoup.select.Elements;
 import searchengine.config.DOMConfiguration;
 import searchengine.model.Page;
 
-import java.io.IOException;
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
-
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Data
 public class Node {
@@ -26,13 +27,17 @@ public class Node {
         this.domConfiguration = domConfiguration;
     }
 
-    public List<Node> getChildren() throws IOException, InterruptedException {
+    public Set<Node> getChildren() {
         String urlAndPath = this.getSiteUrl() + page.getPath();
         Document doc = domConfiguration.getDocument(urlAndPath);
-        if (doc == null) return new ArrayList<>();
+        if (doc == null) return new HashSet<>();
         Elements references = Objects.requireNonNull(doc).select("a[href]");
-        List<Node> childNodes = new ArrayList<>();
-        for (Element ref : references) {
+        List<Element> refsWithoutPictures = references.stream()
+                .filter(x -> !x.absUrl("href").toLowerCase(Locale.ROOT).endsWith("jpeg"))
+                .filter(x -> !x.absUrl("href").toLowerCase(Locale.ROOT).endsWith("jpg"))
+                .filter(x -> !x.absUrl("href").toLowerCase(Locale.ROOT).endsWith("png")).collect(Collectors.toList());
+        Set<Node> childNodes = new HashSet<>();
+        for (Element ref : refsWithoutPictures) {
             if (ref.absUrl("href").startsWith(urlAndPath) && !ref.absUrl("href").contains("#")) {
                 String url = ref.absUrl("href");
                 Document childDoc = domConfiguration.getDocument(url);
