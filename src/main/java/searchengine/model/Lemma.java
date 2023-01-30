@@ -14,6 +14,7 @@ import javax.persistence.Index;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
 import javax.persistence.Table;
+import java.util.Objects;
 
 @Getter
 @Setter
@@ -45,4 +46,17 @@ public class Lemma {
                 '}';
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Lemma lemma1 = (Lemma) o;
+        return id == lemma1.id && frequency == lemma1.frequency && Objects.equals(lemma, lemma1.lemma) &&
+                Objects.equals(site.getUrl(), lemma1.site.getUrl());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, lemma, frequency);
+    }
 }

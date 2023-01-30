@@ -37,7 +37,7 @@ public class SearchServiceImpl implements SearchService {
     private final LemmasFinder lemmasFinder;
     private final int OFFSET = 50;
     private final int SNIPPET_LENGTH = 400;
-    private final double LEMMA_FREQUENCY_COEFFICIENT = 0.9;
+    private final double LEMMA_FREQUENCY_COEFFICIENT = 0.8;
 
     @Override
     public SearchResponse search(SearchRequestParams params) {

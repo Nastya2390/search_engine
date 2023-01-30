@@ -13,6 +13,7 @@ import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
 import javax.persistence.Table;
+import java.util.Objects;
 
 @Getter
 @Setter
@@ -44,4 +45,17 @@ public class Index {
                 '}';
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Index index = (Index) o;
+        return id == index.id && Double.compare(index.rank, rank) == 0 && Objects.equals(page.getPath(), index.page.getPath()) &&
+                Objects.equals(lemma.getLemma(), index.lemma.getLemma());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, rank, page.getPath(), lemma.getLemma());
+    }
 }

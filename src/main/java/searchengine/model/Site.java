@@ -16,6 +16,7 @@ import javax.persistence.Id;
 import javax.persistence.OneToMany;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 @Getter
 @Setter
@@ -58,4 +59,17 @@ public class Site {
                 '}';
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Site site = (Site) o;
+        return id == site.id && status == site.status && Objects.equals(statusTime, site.statusTime) &&
+                Objects.equals(lastError, site.lastError) && Objects.equals(url, site.url) && Objects.equals(name, site.name);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, status, statusTime, lastError, url, name);
+    }
 }
