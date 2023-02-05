@@ -35,8 +35,8 @@ public class SearchServiceImpl implements SearchService {
     private final IndexRepository indexRepository;
     private final SiteRepository siteRepository;
     private final LemmasFinder lemmasFinder;
-    private final int OFFSET = 50;
-    private final int SNIPPET_LENGTH = 400;
+    private final int OFFSET = 60;
+    private final int SNIPPET_LENGTH = 250;
     private final double LEMMA_FREQUENCY_COEFFICIENT = 0.8;
 
     @Override
@@ -46,6 +46,7 @@ public class SearchServiceImpl implements SearchService {
         Map<String, LemmaInfo> searchInfo = getLemmaFrequenciesInfo(params);
         if (searchInfo.isEmpty())
             return new SearchResponse(true, 0, Collections.emptyList());
+        List<Lemma> requestLemmasList = getRequestLemmasList(searchInfo);
         searchInfo = excludeFrequentlyUsedLemma(searchInfo, params.getSite());
         if (searchInfo.isEmpty())
             return new SearchResponse(true, 0, Collections.emptyList());
@@ -53,7 +54,6 @@ public class SearchServiceImpl implements SearchService {
         List<Page> foundPages = getSearchResultPages(searchInfo);
         if (foundPages.isEmpty())
             return new SearchResponse(true, 0, Collections.emptyList());
-        List<Lemma> requestLemmasList = getRequestLemmasList(searchInfo);
         Map<Page, Double> pagesRelevance = computePagesRelativeRelevance(foundPages, requestLemmasList);
         List<SearchData> data = fillResponseDataList(pagesRelevance, requestLemmasList, params);
         return new SearchResponse(true, pagesRelevance.size(), data);
@@ -228,22 +228,31 @@ public class SearchServiceImpl implements SearchService {
     private String getPageSnippet(Page page, List<Lemma> requestLemmas) {
         StringBuilder snippet = new StringBuilder();
         String textWithoutTags = lemmasFinder.deleteHtmlTags(page.getContent());
-        String rusEngTextWithoutTags = lemmasFinder.getRusEngText(textWithoutTags);
-        rusEngTextWithoutTags = rusEngTextWithoutTags.replaceAll("\\s+", " ");
+        textWithoutTags = textWithoutTags.replaceAll("\\s+", " ");
         for (Lemma lemma : requestLemmas) {
-            Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageIdAndLemmaId(page.getId(), lemma.getId());
-            if (!indexListOpt.isPresent() || indexListOpt.get().size() == 0) continue;
-            int lemmaIndex = rusEngTextWithoutTags.indexOf(lemma.getLemma());
-            if (lemmaIndex == -1)
-                lemmaIndex = getLemmaIndexWithoutLastLemmaLetters(lemma.getLemma(), rusEngTextWithoutTags);
-            if (lemmaIndex == -1) continue;
-            snippet.append(constructSnippet(lemmaIndex, rusEngTextWithoutTags)).append("... ");
+            String lemmaWithoutEnding = getLemmaWithoutEnding(lemma.getLemma());
+            Matcher matcher = getContainsLemmaMatcher(textWithoutTags, lemmaWithoutEnding);
+            if (isSnippetNotConstructed(snippet.toString(), lemmaWithoutEnding) && matcher.find()) {
+                Optional<List<Index>> indexListOpt = indexRepository.getIndexByPageIdAndLemmaId(page.getId(), lemma.getId());
+                if (!indexListOpt.isPresent() || indexListOpt.get().size() == 0) continue;
+                int lemmaIndex = matcher.start(1);
+                if (lemmaIndex == -1) continue;
+                snippet.append(cutPartOfWords(constructSnippet(lemmaIndex, textWithoutTags))).append("... ");
+            }
         }
         return boldLemmasInText(snippet.toString(), requestLemmas);
     }
 
-    private int getLemmaIndexWithoutLastLemmaLetters(String word, String text) {
-        return text.indexOf(word.substring(0, word.length() - 1));
+    private String getLemmaWithoutEnding(String lemma) {
+        int wordEnding = lemma.length() > 4 ? 2 : 1;
+        return lemma.substring(0, lemma.length() - wordEnding);
+    }
+
+    private boolean isSnippetNotConstructed(String snippet, String lemmaWithoutEnding) {
+        Matcher matcher = getContainsLemmaMatcher(snippet, lemmaWithoutEnding);
+        return (snippet.isEmpty() ||
+                !matcher.find()) &&
+                snippet.length() + 2 * OFFSET + lemmaWithoutEnding.length() < SNIPPET_LENGTH;
     }
 
     private String constructSnippet(int lemmaIndex, String pageTextWithoutTags) {
@@ -261,7 +270,7 @@ public class SearchServiceImpl implements SearchService {
                 result = pageTextWithoutTags;
             }
         }
-        return cutPartOfWords(result);
+        return result;
     }
 
     private String cutPartOfWords(String word) {
@@ -275,25 +284,36 @@ public class SearchServiceImpl implements SearchService {
         }
     }
 
+    private Matcher getContainsLemmaMatcher(String text, String lemmaWithoutEnding) {
+        Pattern pattern = Pattern.compile("[\\s\\p{P}](" + lemmaWithoutEnding + "[а-яА-ЯёЁa-zA-Z]{1,2}" + ")[\\s\\p{P}]",
+                Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+        return pattern.matcher(text);
+    }
+
     private String boldLemmasInText(String text, List<Lemma> requestLemmas) {
         List<String> uniqueLemmas = requestLemmas.stream()
                 .map(Lemma::getLemma).distinct().collect(Collectors.toList());
         for (String lemma : uniqueLemmas) {
-            Pattern pattern = Pattern.compile(lemma.substring(0, lemma.length() - 1) + "[А-Яа-яa-zA-Z]+[\\s\\p{P}<]",
-                    Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-            Matcher matcher = pattern.matcher(text);
-
-            List<String> matches = new ArrayList<>();
-            while (matcher.find()) {
-                matches.add(text.substring(matcher.start(), matcher.end()));
-            }
-            matches = matches.stream().distinct().sorted((o1, o2) -> o2.length() - o1.length()).collect(Collectors.toList());
-
-            for (String match : matches) {
-                text = text.replaceAll(match, "<b>" + match + "</b>");
-            }
+            String lemmaWithoutEnding = getLemmaWithoutEnding(lemma);
+            makeFoundLemmasBoldInText(text, lemmaWithoutEnding, lemma);
         }
         return text;
+    }
+
+    private void makeFoundLemmasBoldInText(String text, String lemmaWithoutEnding, String lemma) {
+        do {
+            Matcher matcher = getContainsLemmaMatcher(text, lemmaWithoutEnding);
+            if (matcher.find()) {
+                String word = matcher.group(1);
+                if (lemmasFinder.isWordRelatedToBaseForm(word, lemma)) {
+                    int start = matcher.start(1);
+                    int end = matcher.end(1);
+                    text = text.substring(0, start) + "<b>" + word + "</b>" + text.substring(end);
+                }
+            } else {
+                return;
+            }
+        } while (true);
     }
 
 }

@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -53,13 +54,26 @@ public class LemmasFinder {
         return lemmas;
     }
 
+    public boolean isWordRelatedToBaseForm(String word, String baseForm) {
+        word = word.toLowerCase(Locale.ROOT);
+        String[] rusWord = getRussianWords(word);
+        String[] engWord = getEnglishWords(word);
+        List<String> baseForms = new ArrayList<>();
+        if(rusWord.length != 0) {
+            baseForms = luceneMorphologyRus.getNormalForms(rusWord[0]);
+        } else if(engWord.length != 0) {
+            baseForms = luceneMorphologyEng.getNormalForms(engWord[0]);
+        }
+        return baseForms.contains(baseForm);
+    }
+
     public String deleteHtmlTags(String text) {
         return text.replaceAll("\\n", " ")
-                .replaceAll("<style[^<]+</style>", " ")
-                .replaceAll("<script[^<]+</script>", " ")
-                .replaceAll("<noscript[^<]+</noscript>", " ")
-                .replaceAll("<textarea[^<]+</textarea>", " ")
-                .replaceAll("<!--[.]+-->", " ")
+                .replaceAll("<style.*?</style>", " ")
+                .replaceAll("<script.*?</script>", " ")
+                .replaceAll("<noscript.*?</noscript>", " ")
+                .replaceAll("<textarea.*?</textarea>", " ")
+                .replaceAll("<!--.*?-->", " ")
                 .replaceAll("&nbsp;", " ")
                 .replaceAll("<[^>]+>", " ");
     }
@@ -68,22 +82,16 @@ public class LemmasFinder {
         return words.length == 1 && words[0].equals("");
     }
 
-    public String getRusEngText(String text) {
-        return text.toLowerCase(Locale.ROOT)
-                .replaceAll("([^а-яa-z\\s])", " ")
-                .trim();
-    }
-
     private String[] getRussianWords(String text) {
         return text.toLowerCase(Locale.ROOT)
-                .replaceAll("([^а-я\\s])", " ")
+                .replaceAll("([^а-яА-ЯёЁ\\s])", " ")
                 .trim()
                 .split("\\s+");
     }
 
     private String[] getEnglishWords(String text) {
         return text.toLowerCase(Locale.ROOT)
-                .replaceAll("([^a-z\\s])", " ")
+                .replaceAll("([^a-zA-Z\\s])", " ")
                 .trim()
                 .split("\\s+");
     }

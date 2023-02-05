@@ -264,7 +264,7 @@ public class IndexingServiceImpl implements IndexingService {
         log.debug("savePageLemmasToDB - " + (System.currentTimeMillis() - start) + " ms - ");
     }
 
-    public synchronized Lemma fillLemmaInfo(searchengine.model.Site site, String word) {
+    private synchronized Lemma fillLemmaInfo(searchengine.model.Site site, String word) {
         long start = System.currentTimeMillis();
         Lemma lemma;
         Optional<List<Lemma>> lemmasOpt = lemmaRepository.getLemmaByLemmaAndSite(word, site);
