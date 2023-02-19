@@ -56,26 +56,29 @@ public class LemmasFinder {
 
     public boolean isWordRelatedToBaseForm(String word, String baseForm) {
         word = word.toLowerCase(Locale.ROOT);
+        if(word.equals(baseForm)) return true;
         String[] rusWord = getRussianWords(word);
         String[] engWord = getEnglishWords(word);
         List<String> baseForms = new ArrayList<>();
-        if(rusWord.length != 0) {
+        if(!(rusWord.length == 1 && rusWord[0].isEmpty())) {
             baseForms = luceneMorphologyRus.getNormalForms(rusWord[0]);
-        } else if(engWord.length != 0) {
+        } else if(!(engWord.length == 1 && engWord[0].isEmpty())) {
             baseForms = luceneMorphologyEng.getNormalForms(engWord[0]);
         }
         return baseForms.contains(baseForm);
     }
 
     public String deleteHtmlTags(String text) {
-        return text.replaceAll("\\n", " ")
+        return text.replaceAll("\\r\\n", " ")
+                .replaceAll("\\n", " ")
                 .replaceAll("<style.*?</style>", " ")
                 .replaceAll("<script.*?</script>", " ")
                 .replaceAll("<noscript.*?</noscript>", " ")
                 .replaceAll("<textarea.*?</textarea>", " ")
+                .replaceAll("<li><a.*?</a></li>", " ")
+                .replaceAll("<[^>]+>", " ")
                 .replaceAll("<!--.*?-->", " ")
-                .replaceAll("&nbsp;", " ")
-                .replaceAll("<[^>]+>", " ");
+                .replaceAll("&nbsp;", " ");
     }
 
     private boolean isEmptyArray(String[] words) {

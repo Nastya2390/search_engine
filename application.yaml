@@ -25,9 +25,11 @@ dom-settings:
 
 indexing-settings:
   sites:
+    - url: https://et-cetera.ru/mobile/
+      name: et-cetera.ru
+    - url: https://ipfran.ru/
+      name: ipfran.ru
+    - url: https://dombulgakova.ru/
+      name: dombulgakova.ru
     - url: https://www.skillbox.ru
       name: Skillbox
-    - url: https://www.playback.ru
-      name: PlayBack.Ru
-#    - url: https://www.lenta.ru
-#      name: Лента.ру

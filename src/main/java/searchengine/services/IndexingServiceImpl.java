@@ -65,18 +65,19 @@ public class IndexingServiceImpl implements IndexingService {
     @Override
     public void startIndexing() {
         long start = System.currentTimeMillis();
+        boolean isIndexingAlreadyStarted = isIndexingInProcess();
+        SiteMapConstructor.indexingRunning = true;
         SiteMapConstructor.isInterrupted = false;
-        pool = new ForkJoinPool();
         List<Site> sitesList = sites.getSites();
         deleteBackslashAtTheEndOfSiteUrl(sitesList);
         if (sitesList.isEmpty())
             throw new NotFoundException(HttpStatus.NOT_FOUND, NoSitesDataInConfigFile.getValue());
-        if (isIndexingInProcess()) {
+        if (isIndexingAlreadyStarted) {
             throw new ServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, IndexingIsInProcess.getValue());
         }
-        SiteMapConstructor.indexingRunning = true;
         deleteSitesRelatedInformation(sitesList.stream().map(Site::getName).collect(Collectors.toList()));
         fillSitePagesInfo(fillSitesInfo(sitesList));
+        SiteMapConstructor.indexingRunning = false;
         log.debug("startIndexing - " + (System.currentTimeMillis() - start) + " ms");
     }
 
@@ -156,8 +157,10 @@ public class IndexingServiceImpl implements IndexingService {
                 continue;
             }
             Page rootPage = Page.constructPage("/", site, doc);
+            log.debug("fillSitePagesInfo - " + rootPage);
             rootNodes.add(new Node(site.getUrl(), rootPage, domConfiguration));
         }
+        pool = new ForkJoinPool();
         pool.invoke(new SiteMapConstructor(rootNodes, pageRepository, siteRepository, this));
         log.debug("fillSitePagesInfo - " + (System.currentTimeMillis() - start) + " ms");
     }
@@ -169,11 +172,13 @@ public class IndexingServiceImpl implements IndexingService {
             if (!SiteMapConstructor.indexingRunning)
                 throw new BadRequestException(HttpStatus.BAD_REQUEST, IndexingIsNotRun.getValue());
             SiteMapConstructor.isInterrupted = true;
-            pool.shutdownNow();
-            if (pool.awaitTermination(5, TimeUnit.MINUTES)) {
-                setFailedIndexingStatusForSites();
-            } else {
-                throw new ServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, IndexingIsNotStopped.getValue());
+            if(pool != null) {
+                pool.shutdownNow();
+                if (pool.awaitTermination(5, TimeUnit.MINUTES)) {
+                    setFailedIndexingStatusForSites();
+                } else {
+                    throw new ServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR, IndexingIsNotStopped.getValue());
+                }
             }
             SiteMapConstructor.indexingRunning = false;
             log.debug("stopIndexing finished successfully");
@@ -186,14 +191,18 @@ public class IndexingServiceImpl implements IndexingService {
 
     private void setFailedIndexingStatusForSites() {
         long start = System.currentTimeMillis();
-        Optional<List<searchengine.model.Site>> siteListOpt = siteRepository.getSiteByStatus(IndexingStatus.INDEXING);
-        if (!siteListOpt.isPresent() || siteListOpt.get().isEmpty())
-            throw new BadRequestException(HttpStatus.BAD_REQUEST, IndexingIsNotRun.getValue());
-        List<searchengine.model.Site> siteList = siteListOpt.get();
-        for (searchengine.model.Site site : siteList) {
-            site.setStatus(IndexingStatus.FAILED);
-            site.setStatusTime(LocalDateTime.now());
-            site.setLastError(IndexingIsStoppedByUser.getValue());
+        List<Site> sitesList = sites.getSites();
+        if (sitesList.isEmpty())
+            throw new BadRequestException(HttpStatus.BAD_REQUEST, NoSitesDataInConfigFile.getValue());
+        List<searchengine.model.Site> siteList = new ArrayList<>();
+        for (Site site : sitesList) {
+            Optional<searchengine.model.Site> siteOpt = siteRepository.getSiteByName(site.getName());
+            if (!siteOpt.isPresent()) continue;
+            searchengine.model.Site siteModel = siteOpt.get();
+            siteModel.setStatus(IndexingStatus.FAILED);
+            siteModel.setStatusTime(LocalDateTime.now());
+            siteModel.setLastError(IndexingIsStoppedByUser.getValue());
+            siteList.add(siteModel);
         }
         siteRepository.saveAll(siteList);
         log.debug("setFailedIndexingStatusForSites - " + (System.currentTimeMillis() - start) + " ms");
