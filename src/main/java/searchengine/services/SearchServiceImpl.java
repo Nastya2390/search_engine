@@ -255,32 +255,34 @@ public class SearchServiceImpl implements SearchService {
             String lemma = requestLemma.getLemma();
             if (requestLemmas.size() == 1) {
                 addTextWithLemmasToSnippet(textWithoutTags, lemma, snippet, true);
-            } else if (isSnippetNotConstructed(snippet.toString(), lemma)) {
+            } else if (isLemmaAlreadyInSnippet(snippet.toString(), lemma)) {
+                snippet = new StringBuilder();
+                addTextWithLemmasToSnippet(textWithoutTags, lemma, snippet, true);
+            } else {
                 addTextWithLemmasToSnippet(textWithoutTags, lemma, snippet, false);
             }
         }
         return boldLemmasInText(snippet.toString(), requestLemmas);
     }
 
-    private void addTextWithLemmasToSnippet(String textWithoutTags, String lemma, StringBuilder snippet, boolean IsOneLemmaInRequest) {
+    private void addTextWithLemmasToSnippet(String textWithoutTags, String lemma, StringBuilder snippet, boolean isOneLemmaInRequest) {
         Matcher matcher = getContainsLemmaMatcher(textWithoutTags, lemma);
         int lemmaEndIndex = 0;
         while (matcher.find(lemmaEndIndex) && snippet.length() + 2 * OFFSET + lemma.length() < SNIPPET_LENGTH) {
             int lemmaStartIndex = matcher.start(1);
             lemmaEndIndex = matcher.end(1);
             String word = textWithoutTags.substring(lemmaStartIndex, lemmaEndIndex);
-            if (lemmasFinder.isWordRelatedToBaseForm(word, lemma))
+            if (lemmasFinder.isWordRelatedToBaseForm(word, lemma)) {
                 snippet.append(cutPartOfWords(constructSnippet(lemmaStartIndex, textWithoutTags))).append("... ");
-            if(!IsOneLemmaInRequest) return;
+                if (!isOneLemmaInRequest) return;
+            }
         }
     }
 
-    private boolean isSnippetNotConstructed(String snippet, String lemma) {
+    private boolean isLemmaAlreadyInSnippet(String snippet, String lemma) {
         log.debug("isSnippetNotConstructed enter");
         Matcher matcher = getContainsLemmaMatcher(snippet, lemma);
-        return (snippet.isEmpty() ||
-                !matcher.find()) &&
-                snippet.length() + 2 * OFFSET + lemma.length() < SNIPPET_LENGTH;
+        return matcher.find();
     }
 
     private String constructSnippet(int lemmaIndex, String pageTextWithoutTags) {
